@@ -86,6 +86,10 @@ class DocumentLoader:
             print(f"Error loading web page {url}: {e}")
             return []
     
+    def load_documents(self, sources: List[str]) -> List[Document]:
+        """Load documents from multiple sources (alias for load_multiple_sources)"""
+        return self.load_multiple_sources(sources)
+    
     def load_multiple_sources(self, sources: List[str]) -> List[Document]:
         """Load documents from multiple sources (files, directories, URLs)"""
         all_documents = []

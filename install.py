@@ -30,35 +30,74 @@ def install_requirements():
         "requests",
         "beautifulsoup4",
         "numpy",
-        "pandas"
+        "pandas",
+        "streamlit>=1.28.0",
+        "openai>=1.3.0",
+        "langchain>=0.1.0",
+        "langchain-community>=0.0.20",
+        "langchain-openai>=0.0.5"
+    ]
+    
+    # Vector store packages (try both FAISS and ChromaDB)
+    vector_packages = [
+        "faiss-cpu>=1.7.4",  # Primary choice - no SQLite issues
+        "sentence-transformers>=2.2.2"
     ]
     
     # Optional packages (may fail but system can still work)
     optional_packages = [
-        "langchain",
-        "langchain-community", 
-        "langchain-openai",
-        "langchain-chroma",
-        "streamlit",
-        "pypdf",
-        "chromadb",
-        "openai",
-        "tiktoken"
+        "pypdf>=3.17.0",
+        "python-docx>=0.8.11",
+        "tiktoken>=0.5.0",
+        "pydantic>=2.0.0"
+    ]
+    
+    # ChromaDB (may fail due to SQLite)
+    chromadb_packages = [
+        "chromadb>=0.4.15"
     ]
     
     success_count = 0
     
     # Install essential packages
+    print("\n📦 Installing essential packages...")
     for package in packages:
         if install_package(package):
             success_count += 1
     
-    # Try to install optional packages
-    print("\n📦 Installing optional packages (for full functionality)...")
+    # Install vector store packages
+    print("\n🗂️ Installing vector store packages...")
+    vector_success = 0
+    for package in vector_packages:
+        if install_package(package):
+            vector_success += 1
+    
+    # Try ChromaDB (optional due to SQLite issues)
+    print("\n� Attempting ChromaDB installation (may fail due to SQLite)...")
+    chromadb_success = False
+    for package in chromadb_packages:
+        if install_package(package):
+            chromadb_success = True
+            print("✅ ChromaDB installed successfully")
+        else:
+            print("⚠️ ChromaDB installation failed - will use FAISS instead")
+    
+    # Install optional packages
+    print("\n📦 Installing optional packages...")
     for package in optional_packages:
         install_package(package)  # Don't count failures for optional packages
     
-    return success_count == len(packages)
+    # Summary
+    print(f"\n📊 Installation Summary:")
+    print(f"Essential packages: {success_count}/{len(packages)}")
+    print(f"Vector store packages: {vector_success}/{len(vector_packages)}")
+    print(f"ChromaDB: {'✅ Available' if chromadb_success else '❌ Not available (using FAISS)'}")
+    
+    if vector_success == 0:
+        print("❌ No vector store available! System will not work.")
+        return False
+    
+    return success_count >= len(packages) - 2  # Allow some failures
 
 def create_env_file():
     """Create .env file if needed"""
@@ -163,6 +202,36 @@ def test_basic_functionality():
         except ImportError:
             print("⚠️ python-dotenv not available")
         
+        # Test vector stores
+        faiss_available = False
+        chroma_available = False
+        
+        try:
+            import faiss
+            print("✅ FAISS - OK")
+            faiss_available = True
+        except ImportError:
+            print("❌ FAISS not available")
+        
+        try:
+            import chromadb
+            print("✅ ChromaDB - OK")
+            chroma_available = True
+        except ImportError:
+            print("⚠️ ChromaDB not available")
+        
+        # Test LangChain
+        try:
+            from langchain_openai import OpenAIEmbeddings
+            print("✅ LangChain OpenAI - OK")
+        except ImportError:
+            print("❌ LangChain OpenAI not available")
+        
+        # Test if we have at least one vector store
+        if not faiss_available and not chroma_available:
+            print("❌ No vector store available! Install faiss-cpu or chromadb")
+            return False
+        
         # Test if our source files are readable
         src_dir = Path("src")
         if src_dir.exists():
@@ -171,6 +240,14 @@ def test_basic_functionality():
         else:
             print("❌ src/ directory not found")
             return False
+        
+        # Vector store recommendation
+        if faiss_available and not chroma_available:
+            print("💡 Recommendation: Using FAISS (no SQLite issues)")
+        elif chroma_available and not faiss_available:
+            print("💡 Recommendation: Using ChromaDB")
+        elif faiss_available and chroma_available:
+            print("💡 Recommendation: Both FAISS and ChromaDB available")
         
         return True
         
@@ -192,7 +269,7 @@ def show_next_steps():
     print("   (PDF, TXT, or MD files)")
     print()
     print("3. 🚀 Start using the system:")
-    print("   • CLI mode: python main.py")
+    print("   • FAISS mode: python main_faiss.py")
     print("   • Web mode: streamlit run streamlit_app.py")
     print()
     print("4. 🔍 Test with sample queries:")
@@ -200,7 +277,24 @@ def show_next_steps():
     print("   • 'Agentic RAG คืออะไร?'")
     print("   • 'คำนวณ 15% ของ 1000'")
     print()
+    print("💡 Vector Store Status:")
+    
+    # Check which vector stores are available
+    try:
+        import faiss
+        print("   ✅ FAISS - Available (recommended)")
+    except ImportError:
+        print("   ❌ FAISS - Not available")
+    
+    try:
+        import chromadb
+        print("   ✅ ChromaDB - Available")
+    except ImportError:
+        print("   ❌ ChromaDB - Not available")
+    
+    print()
     print("💡 Need help? Check USAGE.md for detailed instructions")
+    print("🔧 SQLite issues? FAISS provides a compatible alternative!")
 
 def main():
     """Main setup function"""
