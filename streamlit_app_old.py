@@ -1,9 +1,14 @@
 """
-Streamlit Web Interface for Agentic RAG - Enhanced Version with Model Selection and Custom Prompts
+Streamlit Web Interface for Agentic RAG - Production Deployment Version
 """
 import streamlit as st
 import os
-import sys
+im        except ImportError:
+            # Fallback to main system
+            try:
+                from main import AgenticRAGSystem
+                st.info("🔄 Using main system...")
+                rag_system = AgenticRAGSystem()sys
 from pathlib import Path
 import tempfile
 
@@ -95,17 +100,17 @@ def check_environment():
     return missing_vars
 
 def initialize_system():
-    """Initialize the RAG system with model settings"""
+    """Initialize the RAG system with proper fallback handling"""
     try:
-        # Get current settings
-        model_name = st.session_state.get('selected_model', 'gpt-3.5-turbo')
-        temperature = st.session_state.get('temperature', 0.1)
-        custom_prompt = st.session_state.get('custom_prompt', '').strip() or None
-        
         # Try FAISS first (recommended)
         try:
             from main_faiss import AgenticRAGSystem
-            st.info(f"🔄 Using FAISS vector store with {model_name}...")
+            st.info("🔄 Using FAISS vector store (SQLite-free)...")
+            
+            # Get current settings
+            model_name = st.session_state.get('selected_model', 'gpt-3.5-turbo')
+            temperature = st.session_state.get('temperature', 0.1)
+            custom_prompt = st.session_state.get('custom_prompt', '').strip() or None
             
             # Initialize with settings
             rag_system = AgenticRAGSystem(
@@ -113,16 +118,76 @@ def initialize_system():
                 temperature=temperature,
                 custom_prompt=custom_prompt
             )
-            
         except ImportError:
-            st.error("❌ main_faiss.py not found. Please ensure the file exists.")
-            return False
+            # Fallback to main system
+            try:
+                from main import AgenticRAGSystem
+                st.info("� Using main system...")
+            except ImportError:
+                # Final fallback - build system manually
+                from vector_store_faiss import FAISSVectorStore
+                from document_loader import DocumentLoader
+                from agentic_rag import AgenticRAG
+                
+                class AgenticRAGSystem:
+                    def __init__(self):
+                        self.vector_manager = FAISSVectorStore()
+                        self.doc_loader = DocumentLoader()
+                        self.agent = None
+                        
+                    def get_document_count(self):
+                        return len(self.vector_manager.documents) if hasattr(self.vector_manager, 'documents') else 0
+                        
+                    def initialize_agent(self):
+                        if self.get_document_count() > 0:
+                            self.agent = AgenticRAG(
+                                vector_store_manager=self.vector_manager,
+                                temperature=0.1,
+                                verbose=True
+                            )
+                            return True
+                        return False
+                        
+                    def query(self, question):
+                        if self.agent:
+                            result = self.agent.query(question)
+                            return {"answer": result.get('output', result.get('answer', str(result)))}
+                        return {"answer": "Agent not initialized. Please add documents first."}
+                        
+                    def add_documents_from_sources(self, sources):
+                        try:
+                            documents = self.doc_loader.load_documents(sources)
+                            if documents:
+                                self.vector_manager.add_documents(documents)
+                                return True
+                            return False
+                        except Exception as e:
+                            st.error(f"Error adding documents: {e}")
+                            return False
+                
+                st.info("🔄 Using fallback system...")
         
         with st.spinner("🚀 Initializing system..."):
-            # Store system for file upload only - no automatic data loading
+            rag_system = AgenticRAGSystem()
+            
+            # Check for existing documents
+            data_path = current_dir / "data"
+            if data_path.exists() and any(data_path.iterdir()):
+                try:
+                    rag_system.add_documents_from_sources([str(data_path)])
+                    doc_count = rag_system.get_document_count()
+                    if doc_count > 0:
+                        st.success(f"✅ Loaded {doc_count} documents from data folder")
+                        rag_system.initialize_agent()
+                        st.session_state.rag_system = rag_system
+                        st.session_state.system_ready = True
+                        return True
+                except Exception as e:
+                    st.warning(f"⚠️ Could not load existing documents: {e}")
+            
+            # Store system for file upload
             st.session_state.rag_system = rag_system
-            st.info("💡 System initialized! Please upload documents to get started.")
-            st.warning("� No automatic document loading. Upload files using the sidebar.")
+            st.warning("⚠️ No documents found. Please upload documents first.")
             return False
                 
     except Exception as e:
@@ -169,38 +234,13 @@ def process_uploaded_files(uploaded_files):
                 # Try to initialize agent if not ready
                 if not st.session_state.get('system_ready', False):
                     try:
-                        # Check if we have enough documents
-                        doc_count = st.session_state.rag_system.get_document_count()
-                        st.info(f"📊 Total documents in database: {doc_count}")
-                        
-                        if doc_count > 0:
-                            # Try to initialize agent
-                            if st.session_state.rag_system.initialize_agent():
-                                st.session_state.system_ready = True
-                                st.success("✅ System is now ready for questions!")
-                                st.balloons()  # Celebration effect
-                            else:
-                                st.error("❌ Agent initialization failed even with documents present")
-                                st.info("💡 Try clicking 'Apply Model Settings' and then 'Initialize System' again")
+                        if st.session_state.rag_system.initialize_agent():
+                            st.session_state.system_ready = True
+                            st.success("✅ System is now ready for questions!")
                         else:
-                            st.warning("⚠️ No documents found in database after upload")
-                            st.info("💡 Please try uploading the files again")
-                            
+                            st.warning("⚠️ Files uploaded but agent initialization failed")
                     except Exception as e:
-                        st.error(f"❌ Agent initialization error: {str(e)}")
-                        st.info("🔧 Troubleshooting steps:")
-                        st.code("""
-1. Check if OPENAI_API_KEY is set correctly
-2. Try clicking 'Apply Model Settings' 
-3. Click 'Initialize System' again
-4. If still failing, try 'Reset System' and start over
-                        """)
-                        
-                        # Show detailed error for debugging
-                        with st.expander("🐛 Technical Details"):
-                            st.text(f"Error type: {type(e).__name__}")
-                            st.text(f"Error message: {str(e)}")
-                            
+                        st.warning(f"⚠️ Files uploaded but agent init failed: {e}")
                 return True
             else:
                 st.error("❌ Failed to process files")
@@ -259,8 +299,8 @@ def main():
     """Main application with enhanced UI and settings"""
     
     # Header with styling
-    st.markdown('<h1 class="main-header">🤖 Enhanced Agentic RAG System</h1>', unsafe_allow_html=True)
-    st.markdown("### AI-Powered Document Q&A with Custom Models & Prompts")
+    st.markdown('<h1 class="main-header">🤖 Agentic RAG System</h1>', unsafe_allow_html=True)
+    st.markdown("### AI-Powered Document Question Answering with Advanced Settings")
     
     # Environment check
     missing_vars = check_environment()
@@ -311,91 +351,39 @@ def main():
     with st.sidebar:
         st.header("⚙️ System Control")
         
-        # System status display
-        with st.container():
-            st.subheader("📊 System Status")
-            
-            # Check system components
-            has_system = hasattr(st.session_state, 'rag_system')
-            is_ready = st.session_state.get('system_ready', False)
-            
-            if has_system:
-                st.success("✅ RAG System: Loaded")
-                try:
-                    doc_count = st.session_state.rag_system.get_document_count()
-                    if doc_count > 0:
-                        st.success(f"✅ Documents: {doc_count} loaded")
-                    else:
-                        st.warning("⚠️ Documents: None loaded")
-                except:
-                    st.error("❌ Documents: Error checking count")
-            else:
-                st.error("❌ RAG System: Not loaded")
-            
-            if is_ready:
-                st.success("✅ Agent: Ready")
-            else:
-                st.error("❌ Agent: Not initialized")
-            
-            # API Key status
-            api_key = get_env_var("OPENAI_API_KEY")
-            if api_key:
-                st.success("✅ API Key: Configured")
-            else:
-                st.error("❌ API Key: Missing")
-        
-        st.divider()
-        
         # System status and initialization
         if not st.session_state.system_ready:
             if st.button("🚀 Initialize System", type="primary"):
                 initialize_system()
-                
-            # Show manual agent initialization if system exists but agent not ready
-            if hasattr(st.session_state, 'rag_system') and not st.session_state.system_ready:
-                st.warning("⚠️ System exists but agent not ready")
-                
-                # Check if agent is actually ready but session state is wrong
-                if hasattr(st.session_state.rag_system, 'is_agent_ready') and st.session_state.rag_system.is_agent_ready():
-                    st.session_state.system_ready = True
-                    st.success("✅ Agent was already ready! Status updated.")
-                    st.rerun()
-                
-                if st.button("🤖 Try Initialize Agent Only"):
-                    try:
-                        doc_count = st.session_state.rag_system.get_document_count()
-                        st.info(f"📊 Documents available: {doc_count}")
-                        
-                        if doc_count > 0:
-                            with st.spinner("🤖 Initializing agent..."):
-                                if st.session_state.rag_system.initialize_agent():
-                                    st.session_state.system_ready = True
-                                    st.success("✅ Agent initialized successfully!")
-                                    st.rerun()
-                                else:
-                                    st.error("❌ Agent initialization returned False")
-                        else:
-                            st.error("❌ No documents found. Please upload documents first.")
-                    except Exception as e:
-                        st.error(f"❌ Agent initialization failed: {e}")
-                        with st.expander("🔧 Debug Info"):
-                            st.text(f"Model: {st.session_state.get('selected_model', 'Unknown')}")
-                            st.text(f"Temperature: {st.session_state.get('temperature', 'Unknown')}")
-                            st.text(f"Custom prompt: {'Yes' if st.session_state.get('custom_prompt', '').strip() else 'No'}")
-                            st.text(f"Error type: {type(e).__name__}")
-                            st.text(f"Error details: {str(e)}")
         else:
             st.success("✅ System Ready")
             
-            # Show document count and model info
+            # Show document count
             if hasattr(st.session_state, 'rag_system'):
                 try:
                     doc_count = st.session_state.rag_system.get_document_count()
-                    model_name = st.session_state.get('selected_model', 'Unknown')
                     st.metric("Documents in Database", doc_count)
-                    st.info(f"🤖 Using: {model_name}")
                 except:
                     st.metric("Documents", "Unknown")
+        
+        st.divider()
+        
+        # File upload section
+        st.header("📄 Upload Documents")
+        uploaded_files = st.file_uploader(
+            "Choose files to upload",
+            type=['pdf', 'txt', 'md', 'docx'],
+            accept_multiple_files=True,
+            help="Upload PDF, TXT, MD, or DOCX files"
+        )
+        
+        if uploaded_files and st.button("📤 Process Files"):
+            # Initialize system if needed
+            if not hasattr(st.session_state, 'rag_system'):
+                initialize_system()
+            
+            if hasattr(st.session_state, 'rag_system'):
+                process_uploaded_files(uploaded_files)
         
         st.divider()
         
@@ -443,25 +431,6 @@ def main():
                 del st.session_state.rag_system
             st.session_state.system_ready = False
             st.success("Settings updated! Please initialize system again.")
-        
-        st.divider()
-        
-        # File upload section
-        st.header("📄 Upload Documents")
-        uploaded_files = st.file_uploader(
-            "Choose files to upload",
-            type=['pdf', 'txt', 'md', 'docx'],
-            accept_multiple_files=True,
-            help="Upload PDF, TXT, MD, or DOCX files"
-        )
-        
-        if uploaded_files and st.button("📤 Process Files"):
-            # Initialize system if needed
-            if not hasattr(st.session_state, 'rag_system'):
-                initialize_system()
-            
-            if hasattr(st.session_state, 'rag_system'):
-                process_uploaded_files(uploaded_files)
         
         st.divider()
         
@@ -546,20 +515,17 @@ def main():
                 st.rerun()
         
         # About section
-        with st.expander("ℹ️ About Enhanced System"):
-            st.markdown(f"""
+        with st.expander("ℹ️ About System"):
+            st.markdown("""
             **Enhanced Agentic RAG System** features:
-            - 🤖 **Model Selection**: Choose from GPT-3.5 to GPT-4o
-            - 🎨 **Custom Prompts**: Override system instructions
-            - 🌡️ **Temperature Control**: Adjust creativity level
-            - 📚 **Multi-format Documents**: PDF, TXT, MD, DOCX
-            - 🔍 **FAISS Vector Search**: SQLite-free, faster search
-            - 🌐 **Multi-language Support**: Thai, English, Mixed
-            - 📝 **Response Customization**: Style, length, format
-            - 📊 **Source Citations**: Track information sources
-            
-            **Current Model**: {st.session_state.get('selected_model', 'Not selected')}
-            **Temperature**: {st.session_state.get('temperature', 0.1)}
+            - 📚 Multi-format document processing
+            - 🔍 Intelligent semantic search
+            - 🤖 AI-powered question answering
+            - 🎨 Customizable response styles
+            - 🌐 Multi-language support
+            - 📝 Source citations
+            - 🧮 Built-in calculator
+            - 🔧 FAISS vector database (SQLite-free)
             """)
     
     # Main chat interface
@@ -599,11 +565,7 @@ def main():
                             'step_by_step': st.session_state.step_by_step
                         }
                         
-                        # Use custom prompt enhancement if no custom system prompt is set
-                        if not st.session_state.get('custom_prompt', '').strip():
-                            enhanced_query = create_enhanced_prompt(prompt, settings)
-                        else:
-                            enhanced_query = prompt  # Let the custom system prompt handle formatting
+                        enhanced_query = create_enhanced_prompt(prompt, settings)
                         
                         # Query the system
                         result = st.session_state.rag_system.query(enhanced_query)
@@ -641,10 +603,9 @@ def main():
                 Please:
                 1. 📤 Upload some documents using the sidebar
                 2. 🚀 Click "Initialize System" 
-                3. 🤖 Select your preferred model and settings
-                4. 💬 Then ask your questions!
+                3. 💬 Then ask your questions!
                 
-                I'm here to help analyze your documents with customizable AI models and response styles.
+                I'm here to help analyze your documents with customizable response styles and languages.
                 """
                 st.markdown(fallback_msg)
                 st.session_state.messages.append({"role": "assistant", "content": fallback_msg})
@@ -655,26 +616,23 @@ def main():
         👋 **Welcome to the Enhanced Agentic RAG System!**
         
         **🚀 Quick Start:**
-        1. 🤖 **Choose Model**: Select from GPT-3.5-turbo to GPT-4o in the sidebar
-        2. 🌡️ **Adjust Temperature**: Control creativity level (0.0 = precise, 2.0 = creative)
-        3. 📝 **Custom Prompt**: Override system instructions with your own
-        4. 📤 **Upload Documents**: Add PDF, TXT, MD, or DOCX files
-        5. 🚀 **Initialize System**: Start the AI with your settings
-        6. 💬 **Start Chatting**: Ask questions about your documents!
+        1. 📤 **Upload Documents**: Use the sidebar to upload PDF, TXT, MD, or DOCX files
+        2. 🚀 **Initialize System**: Click the "Initialize System" button
+        3. 🎨 **Customize Settings**: Choose your preferred response style, language, and length
+        4. 💬 **Start Chatting**: Ask questions about your documents!
         
         **✨ Enhanced Features:**
-        - 🤖 **Multiple AI Models**: Choose the best model for your needs
-        - 📝 **Custom System Prompts**: Define exactly how the AI should behave
-        - 🌡️ **Temperature Control**: Fine-tune response creativity
-        - 🎨 **Response Customization**: Style, language, length control
-        - 📚 **Advanced Document Processing**: Multi-format support
-        - 🔍 **FAISS Vector Search**: Fast, SQLite-free search
-        - 📊 **Source Tracking**: See where answers come from
+        - 🎨 **Customizable Response Styles**: Technical, casual, academic, and more
+        - 🌐 **Multi-language Support**: Auto-detect, Thai, English, or mixed
+        - 📏 **Response Length Control**: Short, medium, long, or comprehensive
+        - 📚 **Source Citations**: Track where information comes from
+        - 🧮 **Built-in Calculator**: Perform calculations when needed
+        - 🔧 **SQLite-free**: Uses FAISS for better compatibility
         
-        **💡 Pro Tips:**
-        - Try different models for different tasks (GPT-4 for complex analysis, GPT-3.5 for quick questions)
-        - Use custom prompts to create specialized assistants
-        - Adjust temperature based on your needs (low for facts, high for creativity)
+        **💡 Try Example Questions:**
+        - Click the example buttons in the sidebar
+        - Or ask: *"What are the main topics in my documents?"*
+        - Try: *"Summarize the key points in Thai"*
         """)
 
 if __name__ == "__main__":

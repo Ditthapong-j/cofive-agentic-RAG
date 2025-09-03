@@ -30,7 +30,16 @@ class DocumentSearchTool(BaseTool):
     def _run(self, query: str, k: int = 4) -> str:
         """Execute the document search"""
         try:
-            docs = self.vector_store_manager.search(query, k)
+            # Support both vector store types
+            if hasattr(self.vector_store_manager, 'search'):
+                # VectorStoreManager
+                docs = self.vector_store_manager.search(query, k)
+            elif hasattr(self.vector_store_manager, 'similarity_search'):
+                # FAISSVectorStore
+                docs = self.vector_store_manager.similarity_search(query, k)
+            else:
+                return f"❌ Vector store not properly configured for search"
+                
             if not docs:
                 return f"ไม่พบเอกสารที่เกี่ยวข้องกับคำค้นหา: '{query}' ในฐานข้อมูล"
             
@@ -128,8 +137,16 @@ class DocumentSummaryTool(BaseTool):
     def _run(self, query: str) -> str:
         """Execute document summary"""
         try:
-            # Search for relevant documents
-            docs = self.vector_store_manager.search(query, k=6)
+            # Search for relevant documents with support for both vector store types
+            if hasattr(self.vector_store_manager, 'search'):
+                # VectorStoreManager
+                docs = self.vector_store_manager.search(query, k=6)
+            elif hasattr(self.vector_store_manager, 'similarity_search'):
+                # FAISSVectorStore
+                docs = self.vector_store_manager.similarity_search(query, k=6)
+            else:
+                return "Vector store not properly configured for search."
+                
             if not docs:
                 return "No relevant documents found for summarization."
             

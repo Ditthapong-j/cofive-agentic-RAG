@@ -18,7 +18,13 @@ sys.path.append(str(Path(__file__).parent / "src"))
 class AgenticRAGSystem:
     """Main class for Agentic RAG system using FAISS only"""
     
-    def __init__(self, vectorstore_path: str = "./vectorstore_faiss"):
+    def __init__(
+        self, 
+        vectorstore_path: str = "./vectorstore_faiss",
+        model_name: str = "gpt-3.5-turbo",
+        temperature: float = 0.1,
+        custom_prompt: str = None
+    ):
         # Check for OpenAI API key
         if not os.getenv("OPENAI_API_KEY"):
             print("❌ OPENAI_API_KEY not found in environment variables.")
@@ -29,6 +35,9 @@ class AgenticRAGSystem:
             raise ValueError("OPENAI_API_KEY is required to run the system.")
         
         self.vectorstore_path = vectorstore_path
+        self.model_name = model_name
+        self.temperature = temperature
+        self.custom_prompt = custom_prompt
         self._initialize_components()
     
     def _initialize_components(self):
@@ -107,17 +116,23 @@ class AgenticRAGSystem:
             
             print("🧠 Initializing Agentic RAG agent...")
             
-            # Get retriever from vector manager
-            retriever = self.vector_manager.get_retriever()
-            if not retriever:
-                raise ValueError("No retriever available from vector store")
-            
-            self.agent = AgenticRAG(retriever)
+            # Pass FAISS vector store directly to agent
+            self.agent = AgenticRAG(
+                vector_store_manager=self.vector_manager,
+                model_name=self.model_name,
+                temperature=self.temperature,
+                custom_prompt=self.custom_prompt
+            )
             print("✅ Agent initialized successfully!")
+            return True
             
         except Exception as e:
             print(f"❌ Failed to initialize agent: {e}")
-            raise
+            return False
+    
+    def is_agent_ready(self):
+        """Check if agent is initialized and ready"""
+        return self.agent is not None
     
     def query(self, question: str) -> dict:
         """Query the system"""

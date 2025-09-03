@@ -7,7 +7,18 @@ from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain.memory import ConversationBufferMemory
-from src.vector_store import VectorStoreManager
+
+# Support both vector store types
+try:
+    from src.vector_store import VectorStoreManager
+except ImportError:
+    VectorStoreManager = None
+
+try:
+    from src.vector_store_faiss import FAISSVectorStore
+except ImportError:
+    FAISSVectorStore = None
+
 from src.tools import get_tools
 
 
@@ -16,17 +27,19 @@ class AgenticRAG:
     
     def __init__(
         self,
-        vector_store_manager: VectorStoreManager,
+        vector_store_manager: Any,  # Support both VectorStoreManager and FAISSVectorStore
         model_name: str = "gpt-3.5-turbo",
         temperature: float = 0.1,
         max_iterations: int = 10,
-        verbose: bool = True
+        verbose: bool = True,
+        custom_prompt: Optional[str] = None
     ):
         self.vector_store_manager = vector_store_manager
         self.model_name = model_name
         self.temperature = temperature
         self.max_iterations = max_iterations
         self.verbose = verbose
+        self.custom_prompt = custom_prompt
         
         # Initialize LLM
         self.llm = ChatOpenAI(
@@ -77,6 +90,12 @@ class AgenticRAG:
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for the agent"""
+        
+        # Use custom prompt if provided
+        if self.custom_prompt:
+            return self.custom_prompt
+        
+        # Default prompt
         return """You are an intelligent AI assistant with access to a knowledge base containing documents in Thai and English. 
 
 MANDATORY WORKFLOW:
