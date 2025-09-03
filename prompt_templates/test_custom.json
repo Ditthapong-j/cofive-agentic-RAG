@@ -1,0 +1,29 @@
+{
+  "name": "test_custom",
+  "description": "Test custom template for development",
+  "system_prompt": "You are a helpful assistant specialized in software development. Always provide code examples.",
+  "style_instructions": {
+    "beginner": "Use simple explanations with basic examples",
+    "advanced": "Provide detailed technical information with complex examples"
+  },
+  "language_instructions": {
+    "auto": "Use the same language as the query",
+    "thai": "Respond in Thai with technical terms explained",
+    "english": "Respond in English with clear explanations"
+  },
+  "length_instructions": {
+    "short": "Brief explanations under 100 words",
+    "long": "Detailed explanations with examples over 300 words"
+  },
+  "tags": [
+    "development",
+    "custom",
+    "test"
+  ],
+  "examples": [
+    {
+      "query": "How to create a function?",
+      "response": "Here's how to create a function in Python: def my_function()..."
+    }
+  ]
+}
