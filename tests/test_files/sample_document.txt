@@ -1,0 +1,49 @@
+Sample Document for Testing
+
+This is a sample text document used for testing the Agentic RAG API system.
+
+Introduction:
+The Agentic RAG (Retrieval-Augmented Generation) system is designed to provide intelligent responses based on uploaded documents. This system combines the power of vector search with large language models to create a conversational AI agent.
+
+Key Features:
+1. Document Upload: Support for PDF, TXT, and MD files
+2. Vector Storage: Efficient document storage using ChromaDB
+3. Intelligent Search: Semantic search capabilities
+4. AI Agent: LangChain-powered conversational agent
+5. REST API: FastAPI-based web service
+
+Architecture:
+- Document Loader: Handles various file formats
+- Vector Store Manager: Manages ChromaDB operations
+- Agentic RAG: Core AI agent functionality
+- API Server: RESTful web service endpoints
+
+Technical Stack:
+- FastAPI for web framework
+- LangChain for AI agent
+- ChromaDB for vector storage
+- OpenAI for language models
+- Streamlit for user interface
+
+Testing Information:
+This document contains information about machine learning, artificial intelligence, and natural language processing. It can be used to test queries about:
+- How does the RAG system work?
+- What are the key features?
+- What technologies are used?
+- How is the system architected?
+
+Sample Questions to Test:
+1. What is the Agentic RAG system?
+2. What file formats are supported?
+3. Which database is used for vector storage?
+4. What AI technologies are involved?
+5. How does the architecture work?
+
+Performance Metrics:
+- Response time: Under 2 seconds for typical queries
+- Accuracy: High semantic relevance
+- Scalability: Supports multiple document formats
+- Reliability: Error handling and validation
+
+Conclusion:
+This sample document provides comprehensive information for testing the RAG system's ability to understand, process, and respond to various types of questions about the system itself.

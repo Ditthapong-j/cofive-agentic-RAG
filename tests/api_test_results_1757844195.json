@@ -1,0 +1,233 @@
+[
+  {
+    "test": "Health Check",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /health (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104450b90>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "System Status",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /status (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104450ec0>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Available Models",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /models (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x1044512e0>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Upload - No Files",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /upload (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104451730>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Upload - Valid Files",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /upload (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104451b20>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Upload - Invalid File Type",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /upload (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104451e80>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Initialize - No Documents",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /reset (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104452330>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Upload - No Files",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /upload (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x1044523c0>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Upload - Valid Files",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /upload (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104451910>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Upload - Invalid File Type",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /upload (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104451760>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Initialize - Normal",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /initialize (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104451040>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Initialize - Different Model",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /initialize (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104450bf0>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Query - No Agent",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /reset (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104452630>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Upload - No Files",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /upload (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104452a50>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Upload - Valid Files",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /upload (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104452ea0>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Upload - Invalid File Type",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /upload (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104453350>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Initialize - No Documents",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /reset (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104453770>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Upload - No Files",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /upload (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x1044531a0>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Upload - Valid Files",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /upload (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104452ba0>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Upload - Invalid File Type",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /upload (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104452780>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Initialize - Normal",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /initialize (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104450f50>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Initialize - Different Model",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /initialize (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104450e00>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Query - 'What is the Agentic RAG system...'",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104451070>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Query - 'What file formats are supporte...'",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104451700>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Query - 'How does Python work?...'",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104451520>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Query - 'What are the key features of m...'",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104453a40>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Query - 'Explain vector databases...'",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104453ec0>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Query - Empty Query",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x1045c43b0>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Query - Invalid Temperature",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104453da0>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "System Reset",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /reset (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x1044523c0>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Invalid Endpoint - /nonexistent",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /nonexistent (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104451d00>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Invalid Endpoint - /upload/invalid",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /upload/invalid (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104451310>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  },
+  {
+    "test": "Invalid Endpoint - /query/test",
+    "success": false,
+    "details": "Exception: HTTPConnectionPool(host='localhost', port=8003): Max retries exceeded with url: /query/test (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x104451040>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+    "timestamp": "2025-09-14 17:03:15",
+    "response_data": null
+  }
+]

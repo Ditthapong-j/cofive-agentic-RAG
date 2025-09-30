@@ -1,0 +1,538 @@
+{
+	"info": {
+		"_postman_id": "agentic-rag-api-collection",
+		"name": "Agentic RAG API",
+		"description": "Complete collection for testing the Agentic RAG API endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "agentic-rag-api"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8003",
+			"description": "Base URL for the API"
+		}
+	],
+	"item": [
+		{
+			"name": "1. Health Check",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has status field\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('status');",
+							"    pm.expect(jsonData.status).to.eql('healthy');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/health",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"health"
+					]
+				},
+				"description": "Check if the API is running and healthy"
+			},
+			"response": []
+		},
+		{
+			"name": "2. System Status",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has required fields\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('status');",
+							"    pm.expect(jsonData).to.have.property('document_count');",
+							"    pm.expect(jsonData).to.have.property('agent_ready');",
+							"    pm.expect(jsonData).to.have.property('api_key_configured');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/status",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"status"
+					]
+				},
+				"description": "Get current system status and configuration"
+			},
+			"response": []
+		},
+		{
+			"name": "3. Available Models",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has models array\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('models');",
+							"    pm.expect(jsonData.models).to.be.an('array');",
+							"    pm.expect(jsonData).to.have.property('default');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/models",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"models"
+					]
+				},
+				"description": "Get list of available AI models"
+			},
+			"response": []
+		},
+		{
+			"name": "4. Upload Documents",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Upload was successful\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('success');",
+							"    pm.expect(jsonData.success).to.be.true;",
+							"    pm.expect(jsonData).to.have.property('files_processed');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "files",
+							"description": "Upload a text file for testing",
+							"type": "text",
+							"value": "This is a sample document for API testing. It contains information about machine learning, artificial intelligence, and the Agentic RAG system. The system uses vector databases and large language models to provide intelligent responses to user queries.",
+							"contentType": "text/plain"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}/upload",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"upload"
+					]
+				},
+				"description": "Upload documents to the system for processing. You can upload PDF, TXT, or MD files."
+			},
+			"response": []
+		},
+		{
+			"name": "5. Initialize Agent",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Agent initialization was successful\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('success');",
+							"    pm.expect(jsonData.success).to.be.true;",
+							"    pm.expect(jsonData).to.have.property('agent_ready');",
+							"    pm.expect(jsonData.agent_ready).to.be.true;",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"model\": \"gpt-3.5-turbo\",\n    \"temperature\": 0.1\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/initialize",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"initialize"
+					]
+				},
+				"description": "Initialize the AI agent with uploaded documents"
+			},
+			"response": []
+		},
+		{
+			"name": "6. Query - What is this about?",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Query was successful\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('success');",
+							"    pm.expect(jsonData.success).to.be.true;",
+							"    pm.expect(jsonData).to.have.property('answer');",
+							"    pm.expect(jsonData.answer).to.be.a('string');",
+							"    pm.expect(jsonData.answer.length).to.be.greaterThan(0);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"What is this document about?\",\n    \"model\": \"gpt-3.5-turbo\",\n    \"temperature\": 0.1\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/query",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"query"
+					]
+				},
+				"description": "Ask a general question about the uploaded documents"
+			},
+			"response": []
+		},
+		{
+			"name": "7. Query - About AI and ML",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response contains answer\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('answer');",
+							"    pm.expect(jsonData).to.have.property('processing_time');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"What is machine learning and artificial intelligence?\",\n    \"model\": \"gpt-3.5-turbo\",\n    \"temperature\": 0.2\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/query",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"query"
+					]
+				},
+				"description": "Ask a specific question about AI and machine learning concepts"
+			},
+			"response": []
+		},
+		{
+			"name": "8. Query - About RAG System",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response is successful\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.success).to.be.true;",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"How does the Agentic RAG system work?\",\n    \"model\": \"gpt-4\",\n    \"temperature\": 0.1\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/query",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"query"
+					]
+				},
+				"description": "Ask about the RAG system using GPT-4 model"
+			},
+			"response": []
+		},
+		{
+			"name": "9. Reset System",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Reset was successful\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('success');",
+							"    pm.expect(jsonData.success).to.be.true;",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/reset",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"reset"
+					]
+				},
+				"description": "Reset the system and clear all documents"
+			},
+			"response": []
+		},
+		{
+			"name": "10. Test Invalid Endpoint",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 404\", function () {",
+							"    pm.response.to.have.status(404);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/nonexistent",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"nonexistent"
+					]
+				},
+				"description": "Test an invalid endpoint to verify error handling"
+			},
+			"response": []
+		},
+		{
+			"name": "11. Test Empty Query (Error Case)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 422 (Validation Error)\", function () {",
+							"    pm.response.to.have.status(422);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"\",\n    \"model\": \"gpt-3.5-turbo\",\n    \"temperature\": 0.1\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/query",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"query"
+					]
+				},
+				"description": "Test query with empty string to verify validation"
+			},
+			"response": []
+		},
+		{
+			"name": "12. Test Invalid Temperature (Error Case)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 422 (Validation Error)\", function () {",
+							"    pm.response.to.have.status(422);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\": \"Test query\",\n    \"model\": \"gpt-3.5-turbo\",\n    \"temperature\": 5.0\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/query",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"query"
+					]
+				},
+				"description": "Test query with invalid temperature value"
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	]
+}

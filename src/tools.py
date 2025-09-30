@@ -1,185 +1,94 @@
 """
-Tools for Agentic RAG
+Tools for the Agentic RAG system.
 """
-from typing import List, Optional, Any
-from langchain_core.tools import BaseTool
-from langchain_core.documents import Document
-from pydantic import BaseModel, Field
-import json
-import requests
-from datetime import datetime
+import logging
+from typing import List, Any
+
+try:
+    from langchain.tools import Tool
+    from langchain.schema import Document
+    from .vector_store import VectorStoreManager
+    DEPENDENCIES_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"Tools dependencies not available: {e}")
+    DEPENDENCIES_AVAILABLE = False
 
 
-class DocumentSearchInput(BaseModel):
-    """Input for document search tool"""
-    query: str = Field(description="Search query for documents")
-    k: int = Field(default=4, description="Number of documents to return")
-
-
-class DocumentSearchTool(BaseTool):
-    """Tool for searching documents in vector store"""
-    name: str = "document_search"
-    description: str = "Search for relevant documents based on a query. Use this when you need to find information from the knowledge base."
-    args_schema: type[BaseModel] = DocumentSearchInput
-    vector_store_manager: object = None
+def create_rag_tools(vector_store_manager: VectorStoreManager) -> List[Tool]:
+    """Create tools for the RAG agent."""
+    if not DEPENDENCIES_AVAILABLE:
+        return []
     
-    def __init__(self, vector_store_manager):
-        super().__init__()
-        object.__setattr__(self, 'vector_store_manager', vector_store_manager)
-    
-    def _run(self, query: str, k: int = 4) -> str:
-        """Execute the document search"""
+    def search_documents(query: str) -> str:
+        """Search for relevant documents."""
         try:
-            # Support both vector store types
-            if hasattr(self.vector_store_manager, 'search'):
-                # VectorStoreManager
-                docs = self.vector_store_manager.search(query, k)
-            elif hasattr(self.vector_store_manager, 'similarity_search'):
-                # FAISSVectorStore
-                docs = self.vector_store_manager.similarity_search(query, k)
-            else:
-                return f"❌ Vector store not properly configured for search"
-                
+            docs = vector_store_manager.similarity_search(query, k=5)
             if not docs:
-                return f"ไม่พบเอกสารที่เกี่ยวข้องกับคำค้นหา: '{query}' ในฐานข้อมูล"
+                return "No relevant documents found."
             
-            # Process and combine information from documents
-            combined_content = []
-            sources = []
-            
+            result = "Found relevant documents:\n\n"
             for i, doc in enumerate(docs, 1):
-                source = doc.metadata.get("source", "Unknown")
-                sources.append(source)
-                content = doc.page_content.strip()
-                
-                # Add content with context
-                combined_content.append(f"เอกสารที่ {i} ({source}):\n{content}")
-            
-            # Create comprehensive response
-            result = f"ผลการค้นหาสำหรับ '{query}':\n\n"
-            result += "\n\n".join(combined_content)
-            result += f"\n\nแหล่งข้อมูล: {', '.join(set(sources))}"
-            result += f"\n\n[หมายเหตุ: ข้อมูลข้างต้นมาจากเอกสารในระบบ กรุณาประมวลผลและตอบคำถามผู้ใช้โดยตรงจากข้อมูลเหล่านี้]"
+                source = doc.metadata.get('source', 'Unknown')
+                content = doc.page_content[:500] + "..." if len(doc.page_content) > 500 else doc.page_content
+                result += f"Document {i} (Source: {source}):\n{content}\n\n"
             
             return result
         except Exception as e:
-            return f"เกิดข้อผิดพลาดในการค้นหาเอกสารสำหรับ '{query}': {str(e)}"
-
-
-class WebSearchInput(BaseModel):
-    """Input for web search tool"""
-    query: str = Field(description="Search query for web search")
-
-
-class WebSearchTool(BaseTool):
-    """Tool for searching the web for current information"""
-    name: str = "web_search"
-    description: str = "Search the web for current information when the knowledge base doesn't have relevant information."
-    args_schema: type[BaseModel] = WebSearchInput
+            return f"Error searching documents: {str(e)}"
     
-    def _run(self, query: str) -> str:
-        """Execute web search (placeholder implementation)"""
+    def get_document_count() -> str:
+        """Get the number of documents in the knowledge base."""
         try:
-            # This is a placeholder implementation
-            # In a real scenario, you would integrate with a web search API like Google Custom Search, Bing, etc.
-            return f"Web search for '{query}' would be performed here. This is a placeholder implementation."
+            count = vector_store_manager.get_document_count()
+            return f"The knowledge base contains {count} documents."
         except Exception as e:
-            return f"Error performing web search: {str(e)}"
-
-
-class CalculatorInput(BaseModel):
-    """Input for calculator tool"""
-    expression: str = Field(description="Mathematical expression to calculate")
-
-
-class CalculatorTool(BaseTool):
-    """Tool for performing calculations"""
-    name: str = "calculator"
-    description: str = "Perform mathematical calculations. Use this for any mathematical operations."
-    args_schema: type[BaseModel] = CalculatorInput
+            return f"Error getting document count: {str(e)}"
     
-    def _run(self, expression: str) -> str:
-        """Execute calculation"""
+    def search_with_score(query: str) -> str:
+        """Search for documents with relevance scores."""
         try:
-            # Safe evaluation of mathematical expressions
-            allowed_names = {
-                k: v for k, v in __builtins__.items() if k in ['abs', 'round', 'min', 'max', 'sum']
-            }
-            allowed_names.update({
-                'pi': 3.14159265359,
-                'e': 2.71828182846
-            })
+            results = vector_store_manager.similarity_search_with_score(query, k=3)
+            if not results:
+                return "No relevant documents found."
             
-            result = eval(expression, {"__builtins__": {}}, allowed_names)
-            return f"The result of {expression} is: {result}"
+            result = "Found relevant documents with scores:\n\n"
+            for i, (doc, score) in enumerate(results, 1):
+                source = doc.metadata.get('source', 'Unknown')
+                content = doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content
+                result += f"Document {i} (Score: {score:.3f}, Source: {source}):\n{content}\n\n"
+            
+            return result
         except Exception as e:
-            return f"Error calculating expression '{expression}': {str(e)}"
-
-
-class DocumentSummaryInput(BaseModel):
-    """Input for document summary tool"""
-    query: str = Field(description="Topic or question to summarize documents about")
-
-
-class DocumentSummaryTool(BaseTool):
-    """Tool for getting summaries of documents"""
-    name: str = "document_summary"
-    description: str = "Get a summary of documents related to a specific topic or question."
-    args_schema: type[BaseModel] = DocumentSummaryInput
-    vector_store_manager: object = None
-    llm: object = None
+            return f"Error searching documents with scores: {str(e)}"
     
-    def __init__(self, vector_store_manager, llm):
-        super().__init__()
-        object.__setattr__(self, 'vector_store_manager', vector_store_manager)
-        object.__setattr__(self, 'llm', llm)
-    
-    def _run(self, query: str) -> str:
-        """Execute document summary"""
-        try:
-            # Search for relevant documents with support for both vector store types
-            if hasattr(self.vector_store_manager, 'search'):
-                # VectorStoreManager
-                docs = self.vector_store_manager.search(query, k=6)
-            elif hasattr(self.vector_store_manager, 'similarity_search'):
-                # FAISSVectorStore
-                docs = self.vector_store_manager.similarity_search(query, k=6)
-            else:
-                return "Vector store not properly configured for search."
-                
-            if not docs:
-                return "No relevant documents found for summarization."
-            
-            # Combine document content
-            combined_content = "\n\n".join([doc.page_content for doc in docs])
-            
-            # Create summary prompt
-            summary_prompt = f"""
-            Please provide a comprehensive summary of the following documents related to: {query}
-
-            Documents:
-            {combined_content}
-
-            Summary:
-            """
-            
-            # Generate summary using LLM
-            summary = self.llm.predict(summary_prompt)
-            return summary
-            
-        except Exception as e:
-            return f"Error generating document summary: {str(e)}"
-
-
-def get_tools(vector_store_manager, llm=None):
-    """Get all available tools for the agent"""
     tools = [
-        DocumentSearchTool(vector_store_manager),
-        WebSearchTool(),
-        CalculatorTool(),
+        Tool(
+            name="search_documents",
+            description="Search for relevant documents in the knowledge base based on a query. Use this to find information related to the user's question.",
+            func=search_documents
+        ),
+        Tool(
+            name="get_document_count",
+            description="Get the total number of documents in the knowledge base.",
+            func=get_document_count
+        ),
+        Tool(
+            name="search_with_score",
+            description="Search for documents with relevance scores. Use this when you need to know how relevant the results are.",
+            func=search_with_score
+        )
     ]
     
-    if llm:
-        tools.append(DocumentSummaryTool(vector_store_manager, llm))
-    
     return tools
+
+
+def create_custom_tool(name: str, description: str, func: Any) -> Tool:
+    """Create a custom tool."""
+    if not DEPENDENCIES_AVAILABLE:
+        raise ImportError("Tools dependencies not available")
+    
+    return Tool(
+        name=name,
+        description=description,
+        func=func
+    )

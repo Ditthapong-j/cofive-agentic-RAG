@@ -1,67 +1,95 @@
 """
-Document Loader Module for Agentic RAG
+Document Loader for various file types.
 """
 import os
-from typing import List, Optional
-from langchain_community.document_loaders import PyPDFLoader, TextLoader, DirectoryLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
-import requests
-from bs4 import BeautifulSoup
+import logging
+from typing import List, Union
+from pathlib import Path
+
+try:
+    from langchain_community.document_loaders import PyPDFLoader, TextLoader, DirectoryLoader
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    from langchain.schema import Document
+    import requests
+    from bs4 import BeautifulSoup
+    DEPENDENCIES_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"Some dependencies not available: {e}")
+    DEPENDENCIES_AVAILABLE = False
 
 
 class DocumentLoader:
-    """Document loader class for various file types"""
+    """Handles loading and processing documents from various sources."""
     
     def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
+        """
+        Initialize DocumentLoader.
+        
+        Args:
+            chunk_size: Size of text chunks
+            chunk_overlap: Overlap between chunks
+        """
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            length_function=len,
-        )
-    
+        
+        if DEPENDENCIES_AVAILABLE:
+            self.text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                length_function=len,
+            )
+        else:
+            self.text_splitter = None
+
     def load_pdf(self, file_path: str) -> List[Document]:
-        """Load PDF documents"""
+        """Load PDF file."""
+        if not DEPENDENCIES_AVAILABLE:
+            raise ImportError("PDF loading requires PyPDF2. Install with: pip install PyPDF2")
+            
         try:
             loader = PyPDFLoader(file_path)
             documents = loader.load()
-            return self.text_splitter.split_documents(documents)
+            return self.text_splitter.split_documents(documents) if self.text_splitter else documents
         except Exception as e:
-            print(f"Error loading PDF {file_path}: {e}")
+            logging.error(f"Error loading PDF {file_path}: {e}")
             return []
-    
+
     def load_text(self, file_path: str) -> List[Document]:
-        """Load text documents"""
+        """Load text file."""
+        if not DEPENDENCIES_AVAILABLE:
+            raise ImportError("Text loading requires langchain. Install with: pip install langchain")
+            
         try:
             loader = TextLoader(file_path, encoding='utf-8')
             documents = loader.load()
-            return self.text_splitter.split_documents(documents)
+            return self.text_splitter.split_documents(documents) if self.text_splitter else documents
         except Exception as e:
-            print(f"Error loading text file {file_path}: {e}")
+            logging.error(f"Error loading text file {file_path}: {e}")
             return []
-    
-    def load_directory(self, directory_path: str) -> List[Document]:
-        """Load all documents from a directory"""
-        documents = []
-        
-        for root, dirs, files in os.walk(directory_path):
-            for file in files:
-                file_path = os.path.join(root, file)
-                file_ext = os.path.splitext(file)[1].lower()
-                
-                if file_ext == '.pdf':
-                    documents.extend(self.load_pdf(file_path))
-                elif file_ext in ['.txt', '.md']:
-                    documents.extend(self.load_text(file_path))
-        
-        return documents
-    
-    def load_web_page(self, url: str) -> List[Document]:
-        """Load content from a web page"""
+
+    def load_directory(self, directory_path: str, glob_pattern: str = "**/*") -> List[Document]:
+        """Load all documents from a directory."""
+        if not DEPENDENCIES_AVAILABLE:
+            raise ImportError("Directory loading requires langchain. Install with: pip install langchain")
+            
         try:
-            response = requests.get(url)
+            loader = DirectoryLoader(
+                directory_path,
+                glob=glob_pattern,
+                loader_cls=TextLoader,
+                loader_kwargs={'encoding': 'utf-8'},
+                show_progress=True
+            )
+            documents = loader.load()
+            return self.text_splitter.split_documents(documents) if self.text_splitter else documents
+        except Exception as e:
+            logging.error(f"Error loading directory {directory_path}: {e}")
+            return []
+
+    def load_web_page(self, url: str) -> List[Document]:
+        """Load content from a web page."""
+        try:
+            response = requests.get(url, timeout=30)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.content, 'html.parser')
@@ -72,43 +100,30 @@ class DocumentLoader:
             
             # Get text content
             text = soup.get_text()
-            
-            # Clean up whitespace
             lines = (line.strip() for line in text.splitlines())
             chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
             text = ' '.join(chunk for chunk in chunks if chunk)
             
-            # Create document
-            doc = Document(page_content=text, metadata={"source": url})
-            return self.text_splitter.split_documents([doc])
+            document = Document(page_content=text, metadata={"source": url})
             
-        except Exception as e:
-            print(f"Error loading web page {url}: {e}")
-            return []
-    
-    def load_documents(self, sources: List[str]) -> List[Document]:
-        """Load documents from multiple sources (alias for load_multiple_sources)"""
-        return self.load_multiple_sources(sources)
-    
-    def load_multiple_sources(self, sources: List[str]) -> List[Document]:
-        """Load documents from multiple sources (files, directories, URLs)"""
-        all_documents = []
-        
-        for source in sources:
-            if source.startswith('http://') or source.startswith('https://'):
-                # Web URL
-                all_documents.extend(self.load_web_page(source))
-            elif os.path.isfile(source):
-                # Single file
-                file_ext = os.path.splitext(source)[1].lower()
-                if file_ext == '.pdf':
-                    all_documents.extend(self.load_pdf(source))
-                elif file_ext in ['.txt', '.md']:
-                    all_documents.extend(self.load_text(source))
-            elif os.path.isdir(source):
-                # Directory
-                all_documents.extend(self.load_directory(source))
+            if self.text_splitter:
+                return self.text_splitter.split_documents([document])
             else:
-                print(f"Unknown source type: {source}")
+                return [document]
+                
+        except Exception as e:
+            logging.error(f"Error loading web page {url}: {e}")
+            return []
+
+    def load_file(self, file_path: str) -> List[Document]:
+        """Load a file based on its extension."""
+        path = Path(file_path)
+        extension = path.suffix.lower()
         
-        return all_documents
+        if extension == '.pdf':
+            return self.load_pdf(file_path)
+        elif extension in ['.txt', '.md', '.py', '.js', '.html', '.css']:
+            return self.load_text(file_path)
+        else:
+            logging.warning(f"Unsupported file type: {extension}")
+            return []

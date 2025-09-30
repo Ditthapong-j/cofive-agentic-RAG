@@ -1,204 +1,272 @@
 """
-Agentic RAG Agent
+Agentic RAG system with tool support and conversation memory.
 """
-from typing import List, Optional, Any, Dict
-from langchain_openai import ChatOpenAI
-from langchain.agents import AgentExecutor, create_openai_tools_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-from langchain.memory import ConversationBufferMemory
-
-# Support both vector store types
-try:
-    from src.vector_store import VectorStoreManager
-except ImportError:
-    VectorStoreManager = None
+import logging
+from typing import List, Dict, Any, Optional
+import json
 
 try:
-    from src.vector_store_faiss import FAISSVectorStore
-except ImportError:
-    FAISSVectorStore = None
-
-from src.tools import get_tools
+    from langchain.agents import AgentExecutor, create_openai_tools_agent
+    from langchain_community.chat_models import ChatOpenAI
+    from langchain.memory import ConversationBufferWindowMemory
+    from langchain.schema import Document, BaseMessage
+    from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+    from langchain.tools import Tool
+    from .vector_store import VectorStoreManager
+    from .tools import create_rag_tools
+    DEPENDENCIES_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"Agentic RAG dependencies not available: {e}")
+    DEPENDENCIES_AVAILABLE = False
 
 
 class AgenticRAG:
-    """Agentic RAG system with reasoning capabilities"""
+    """Agentic RAG system with tools and conversation memory."""
     
-    def __init__(
-        self,
-        vector_store_manager: Any,  # Support both VectorStoreManager and FAISSVectorStore
-        model_name: str = "gpt-3.5-turbo",
-        temperature: float = 0.1,
-        max_iterations: int = 10,
-        verbose: bool = True,
-        custom_prompt: Optional[str] = None
-    ):
+    def __init__(self, 
+                 vector_store_manager: VectorStoreManager,
+                 model_name: str = "gpt-5-mini",
+                 temperature: float = 0.7,
+                 memory_window: int = 10):
+        """
+        Initialize AgenticRAG.
+        
+        Args:
+            vector_store_manager: Vector store manager instance
+            model_name: OpenAI model to use
+            temperature: Model temperature
+            memory_window: Number of conversation turns to remember
+        """
         self.vector_store_manager = vector_store_manager
         self.model_name = model_name
         self.temperature = temperature
-        self.max_iterations = max_iterations
-        self.verbose = verbose
-        self.custom_prompt = custom_prompt
+        self.memory_window = memory_window
         
-        # Initialize LLM
-        self.llm = ChatOpenAI(
-            model=model_name,
-            temperature=temperature
-        )
-        
-        # Initialize tools
-        self.tools = get_tools(vector_store_manager, self.llm)
-        
-        # Initialize memory
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True
-        )
-        
-        # Create agent
-        self._create_agent()
-    
-    def _create_agent(self):
-        """Create the OpenAI tools agent"""
-        
-        # Define the prompt template
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", self._get_system_prompt()),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
-        
-        # Create agent
-        agent = create_openai_tools_agent(
-            llm=self.llm,
-            tools=self.tools,
-            prompt=prompt
-        )
-        
-        # Create agent executor
-        self.agent_executor = AgentExecutor(
-            agent=agent,
-            tools=self.tools,
-            memory=self.memory,
-            verbose=self.verbose,
-            max_iterations=self.max_iterations,
-            return_intermediate_steps=True,
-            handle_parsing_errors=True
-        )
-    
-    def _get_system_prompt(self) -> str:
-        """Get the system prompt for the agent"""
-        
-        # Use custom prompt if provided
-        if self.custom_prompt:
-            return self.custom_prompt
-        
-        # Default prompt
-        return """You are an intelligent AI assistant with access to a knowledge base containing documents in Thai and English. 
+        if DEPENDENCIES_AVAILABLE:
+            try:
+                self.llm = ChatOpenAI(
+                    model_name=model_name,
+                    temperature=temperature
+                )
+                
+                self.memory = ConversationBufferWindowMemory(
+                    k=memory_window,
+                    memory_key="chat_history",
+                    return_messages=True
+                )
+                
+                self.tools = create_rag_tools(vector_store_manager)
+                self.agent_executor = self._create_agent()
+                
+            except Exception as e:
+                logging.error(f"Failed to initialize AgenticRAG: {e}")
+                self.llm = None
+                self.agent_executor = None
+        else:
+            self.llm = None
+            self.agent_executor = None
 
-MANDATORY WORKFLOW:
-1. ALWAYS use document_search tool first for any question
-2. ANALYZE and PROCESS the search results
-3. PROVIDE a complete answer based on the documents found
-4. DO NOT just reference the source files - EXTRACT and SUMMARIZE the actual information
+    def _create_agent(self) -> Optional[AgentExecutor]:
+        """Create the OpenAI tools agent."""
+        if not self.llm or not self.tools:
+            return None
+            
+        try:
+            # Define the prompt template
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", """You are a helpful AI assistant with access to a document retrieval system.
+                
+Use the available tools to search for relevant information to answer user questions.
+When you retrieve documents, summarize the key information and provide specific details.
+If you can't find relevant information in the documents, say so clearly.
 
-RESPONSE REQUIREMENTS:
-- Give direct answers based on document content
-- Quote specific information from the documents
-- Synthesize information from multiple documents if needed
-- Provide actionable information, not just file references
-- If multiple relevant documents are found, combine the information intelligently
+Always be helpful, accurate, and cite your sources when possible."""),
+                MessagesPlaceholder(variable_name="chat_history"),
+                ("human", "{input}"),
+                MessagesPlaceholder(variable_name="agent_scratchpad"),
+            ])
+            
+            # Create the agent
+            agent = create_openai_tools_agent(
+                llm=self.llm,
+                tools=self.tools,
+                prompt=prompt
+            )
+            
+            # Create agent executor
+            agent_executor = AgentExecutor(
+                agent=agent,
+                tools=self.tools,
+                memory=self.memory,
+                verbose=True,
+                handle_parsing_errors=True,
+                max_iterations=5
+            )
+            
+            return agent_executor
+            
+        except Exception as e:
+            logging.error(f"Error creating agent: {e}")
+            return None
 
-EXAMPLE OF GOOD RESPONSE:
-"ตามเอกสารที่พบ วิธีแก้ปัญหาการลืมรหัสผ่าน Venio คือ: 
-1. ติดต่อแอดมินเพื่อรีเซ็ตรหัสผ่าน
-2. ใช้ฟีเจอร์ Forgot Password ในหน้าล็อกอิน
-3. ตรวจสอบอีเมลเพื่อรับลิงก์รีเซ็ตรหัสผ่าน"
-
-EXAMPLE OF BAD RESPONSE:
-"คุณสามารถตรวจสอบข้อมูลเพิ่มเติมในเอกสาร file.txt"
-
-SEARCH STRATEGY:
-- For Python: search "Python", "โปรแกรม", "programming" 
-- For Cofive: search "Cofive", "บริษัท", "company"
-- For passwords/login: search "รหัสผ่าน", "password", "login", "เข้าสู่ระบบ"
-- For Venio: search "Venio", "ระบบ"
-
-Available tools:
-- document_search: Search knowledge base (USE FIRST, PROCESS RESULTS)
-- calculator: Mathematical calculations  
-- document_summary: Document summaries
-- web_search: Web search (only if no relevant documents)
-
-Remember: EXTRACT, SYNTHESIZE, and PROVIDE complete answers from the documents. Never just point to files."""
-    
     def query(self, question: str) -> Dict[str, Any]:
         """
-        Process a query and return the response with intermediate steps
+        Query the agentic RAG system.
         
         Args:
-            question: The user's question
+            question: User question
             
         Returns:
-            Dict containing the response and intermediate steps
+            Dictionary containing response and metadata
         """
+        if not DEPENDENCIES_AVAILABLE:
+            return {
+                "answer": "AgenticRAG system not available. Please install required dependencies.",
+                "sources": [],
+                "error": "Dependencies not available",
+                "success": False
+            }
+            
+        if not self.agent_executor:
+            return {
+                "answer": "AgenticRAG system not properly initialized.",
+                "sources": [],
+                "error": "System not initialized",
+                "success": False
+            }
+        
         try:
+            # Execute the agent
+            logging.info(f"Processing query: {question[:50]}...")
             result = self.agent_executor.invoke({"input": question})
             
+            # Extract information
+            answer = result.get("output", "No answer generated")
+            
+            # Try to extract sources from tool calls or memory
+            sources = self._extract_sources_from_memory()
+            
+            logging.info(f"Query processed successfully. Answer length: {len(answer)} chars")
+            
             return {
-                "answer": result["output"],
-                "intermediate_steps": result.get("intermediate_steps", []),
+                "answer": answer,
+                "sources": sources,
+                "model": self.model_name,
                 "success": True
             }
+            
         except Exception as e:
+            error_msg = str(e)
+            logging.error(f"Error in query processing: {error_msg}")
+            
+            # Check for specific ChatOpenAI errors and provide helpful feedback
+            if "model" in error_msg and "field" in error_msg:
+                error_msg = "ChatOpenAI model configuration error. This may be due to LangChain version compatibility."
+                logging.error("ChatOpenAI model field error detected - check LangChain version compatibility")
+            
             return {
-                "answer": f"I encountered an error while processing your question: {str(e)}",
-                "intermediate_steps": [],
-                "success": False,
-                "error": str(e)
+                "answer": f"Error processing query: {error_msg}",
+                "sources": [],
+                "error": error_msg,
+                "success": False
             }
-    
+
     def chat(self, message: str) -> str:
         """
-        Simple chat interface
+        Simple chat interface.
         
         Args:
             message: User message
             
         Returns:
-            Agent's response
+            Assistant response
         """
         result = self.query(message)
-        return result["answer"]
-    
-    def get_conversation_history(self) -> List[BaseMessage]:
-        """Get the conversation history"""
-        return self.memory.chat_memory.messages
-    
-    def clear_memory(self):
-        """Clear the conversation memory"""
-        self.memory.clear()
-    
-    def add_documents(self, documents):
-        """Add new documents to the vector store"""
-        self.vector_store_manager.add_documents(documents)
-    
-    def get_sources_used(self, result: Dict[str, Any]) -> List[str]:
-        """Extract sources used in the response"""
+        return result.get("answer", "Sorry, I couldn't process your request.")
+
+    def _extract_sources_from_memory(self) -> List[str]:
+        """Extract sources from recent memory."""
         sources = []
-        
-        for step in result.get("intermediate_steps", []):
-            if step[0].tool == "document_search":
-                # Parse the document search results to extract sources
-                output = step[1]
-                if "Source:" in output:
-                    lines = output.split("\n")
-                    for line in lines:
-                        if "Source:" in line:
-                            source = line.split("Source:")[1].split(")")[0].strip()
-                            if source not in sources:
-                                sources.append(source)
+        try:
+            if self.memory and hasattr(self.memory, 'chat_memory'):
+                messages = self.memory.chat_memory.messages[-10:]  # Last 10 messages
+                for message in messages:
+                    if hasattr(message, 'content'):
+                        content = message.content
+                        # Look for source mentions in the content
+                        if 'source:' in content.lower():
+                            lines = content.split('\n')
+                            for line in lines:
+                                if 'source:' in line.lower():
+                                    source = line.split('source:', 1)[1].strip()
+                                    if source and source not in sources:
+                                        sources.append(source)
+        except Exception as e:
+            logging.error(f"Error extracting sources: {e}")
         
         return sources
+
+    def get_conversation_history(self) -> List[Dict[str, Any]]:
+        """Get conversation history."""
+        history = []
+        try:
+            if self.memory and hasattr(self.memory, 'chat_memory'):
+                messages = self.memory.chat_memory.messages
+                for message in messages:
+                    if hasattr(message, 'content'):
+                        history.append({
+                            "type": message.__class__.__name__,
+                            "content": message.content
+                        })
+        except Exception as e:
+            logging.error(f"Error getting conversation history: {e}")
+        
+        return history
+
+    def clear_memory(self) -> bool:
+        """Clear conversation memory."""
+        try:
+            if self.memory:
+                self.memory.clear()
+                logging.info("Conversation memory cleared")
+                return True
+        except Exception as e:
+            logging.error(f"Error clearing memory: {e}")
+        
+        return False
+
+    def get_available_tools(self) -> List[Dict[str, str]]:
+        """Get list of available tools."""
+        if not self.tools:
+            return []
+            
+        return [
+            {
+                "name": tool.name,
+                "description": tool.description
+            }
+            for tool in self.tools
+        ]
+
+    def update_model(self, model_name: str, temperature: float = None) -> bool:
+        """Update the model configuration."""
+        try:
+            if temperature is None:
+                temperature = self.temperature
+                
+            self.model_name = model_name
+            self.temperature = temperature
+            
+            if DEPENDENCIES_AVAILABLE:
+                self.llm = ChatOpenAI(
+                    model_name=model_name,
+                    temperature=temperature
+                )
+                self.agent_executor = self._create_agent()
+                
+            logging.info(f"Updated model to {model_name}")
+            return True
+            
+        except Exception as e:
+            logging.error(f"Error updating model: {e}")
+            return False
