@@ -14,13 +14,12 @@ langchain>=0.1.0
 langchain-community>=0.0.20
 langchain-openai>=0.0.5
 langchain-text-splitters>=0.0.1
+langchain-chroma>=0.1.0
 
-# Vector Database - Use FAISS as fallback for SQLite issues
+# Vector Database - ChromaDB and FAISS
+chromadb>=0.4.15
 faiss-cpu>=1.7.4
 sentence-transformers>=2.2.2
-
-# Optional: ChromaDB (may fail on some systems due to SQLite version)
-# chromadb>=0.4.15
 
 # Document Processing
 pypdf>=3.17.0

@@ -15,7 +15,7 @@ try:
     from langchain.vectorstores.base import VectorStore
     DEPENDENCIES_AVAILABLE = True
 except ImportError as e:
-    logging.warning(f"Vector store dependencies not available: {e}")
+    logging.info(f"Using fallback: langchain_chroma not available ({e}), falling back to community version")
     # Fallback to community imports if langchain_chroma not available
     try:
         from langchain.schema import Document
@@ -24,7 +24,7 @@ except ImportError as e:
         from langchain.vectorstores.base import VectorStore
         DEPENDENCIES_AVAILABLE = True
     except ImportError as e2:
-        logging.warning(f"Fallback vector store dependencies not available: {e2}")
+        logging.error(f"Critical: No vector store dependencies available: {e2}")
         DEPENDENCIES_AVAILABLE = False
 
 
