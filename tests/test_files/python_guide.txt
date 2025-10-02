@@ -1,0 +1,94 @@
+Python Programming Guide
+
+Python is a high-level, interpreted programming language known for its simplicity and readability.
+
+Key Features:
+- Easy to learn and use
+- Large standard library
+- Cross-platform compatibility
+- Strong community support
+- Extensive third-party packages
+
+Data Types:
+1. Numbers (int, float, complex)
+2. Strings
+3. Lists
+4. Tuples
+5. Dictionaries
+6. Sets
+
+Control Structures:
+- if/elif/else statements
+- for loops
+- while loops
+- try/except error handling
+
+Functions:
+Functions are reusable blocks of code that perform specific tasks.
+
+def greet(name):
+    return f"Hello, {name}!"
+
+Classes and Objects:
+Python supports object-oriented programming.
+
+class Person:
+    def __init__(self, name, age):
+        self.name = name
+        self.age = age
+    
+    def introduce(self):
+        return f"I'm {self.name}, {self.age} years old"
+
+Libraries and Frameworks:
+- NumPy: Numerical computing
+- Pandas: Data manipulation
+- Matplotlib: Data visualization
+- Django/Flask: Web frameworks
+- TensorFlow/PyTorch: Machine learning
+- FastAPI: Modern web APIs
+- Streamlit: Data apps
+
+Best Practices:
+1. Follow PEP 8 style guide
+2. Write clear, descriptive variable names
+3. Use docstrings for documentation
+4. Handle exceptions appropriately
+5. Write unit tests
+6. Use virtual environments
+
+Virtual Environments:
+Virtual environments help manage project dependencies.
+
+Commands:
+python -m venv myenv
+source myenv/bin/activate  # Linux/Mac
+myenv\Scripts\activate     # Windows
+pip install package_name
+pip freeze > requirements.txt
+
+Package Management:
+Use pip to install and manage packages:
+pip install requests
+pip install -r requirements.txt
+pip list
+pip show package_name
+
+File Operations:
+with open('file.txt', 'r') as f:
+    content = f.read()
+
+with open('output.txt', 'w') as f:
+    f.write('Hello, World!')
+
+Error Handling:
+try:
+    result = 10 / 0
+except ZeroDivisionError:
+    print("Cannot divide by zero!")
+except Exception as e:
+    print(f"An error occurred: {e}")
+finally:
+    print("Cleanup code here")
+
+This document provides fundamental Python concepts for testing the RAG system's understanding of programming topics.

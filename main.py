@@ -84,7 +84,7 @@ class AgenticRAGSystem:
         print("Documents added to vector store successfully!")
         return True
     
-    def initialize_agent(self, model_name: str = "gpt-3.5-turbo", temperature: float = 0.1):
+    def initialize_agent(self, model_name: str = "gpt-4o-mini", temperature: float = 0.1):
         """Initialize the agentic RAG agent"""
         if self.vector_store_manager.get_document_count() == 0:
             raise ValueError("No documents in vector store. Add documents first.")

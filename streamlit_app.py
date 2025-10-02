@@ -298,7 +298,7 @@ def main():
         'include_sources': True,
         'include_examples': False,
         'step_by_step': False,
-        'selected_model': 'gpt-3.5-turbo',
+        'selected_model': 'gpt-4o-mini',
         'custom_prompt': '',
         'temperature': 0.1
     }
