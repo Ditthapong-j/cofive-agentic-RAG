@@ -6,6 +6,8 @@ import os
 import sys
 import tempfile
 import shutil
+import uuid
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -66,15 +68,14 @@ A comprehensive API for document-based question answering using RAG (Retrieval-A
 
 ## ✨ Features
 - 📄 **Document Management**: Upload, process, and manage documents (PDF, TXT, MD)
-- 🤖 **AI Agent**: Initialize and configure AI agents with different models
+- 🤖 **AI Agent**: Automatically initialized when documents are uploaded
 - 💬 **Query Processing**: Ask questions about uploaded documents
 - 🔧 **System Management**: Health checks, status monitoring, and system reset
 
 ## 🔄 Workflow
 1. **Upload Documents** → Upload your files using `/upload`
-2. **Initialize Agent** → Set up AI agent with `/initialize`
-3. **Query Documents** → Ask questions with `/query`
-4. **Manage System** → Monitor and reset using system endpoints
+2. **Query Documents** → Ask questions with `/query` (agent auto-initializes)
+3. **Manage System** → Monitor and reset using system endpoints
 
 ## 🧠 Supported AI Models
 - gpt-3.5-turbo
@@ -89,9 +90,8 @@ Requires `OPENAI_API_KEY` environment variable.
 
 ## 📚 Quick Start
 1. Set your OpenAI API key: `export OPENAI_API_KEY=your_key_here`
-2. Upload documents via `/upload` endpoint
-3. Initialize agent via `/initialize` endpoint
-4. Start querying via `/query` endpoint
+2. Upload documents via `/upload` endpoint (agent auto-initializes)
+3. Start querying via `/query` endpoint
     """,
     version="1.0.0",
     lifespan=lifespan,
@@ -114,16 +114,12 @@ Requires `OPENAI_API_KEY` environment variable.
             "description": "📄 Document upload and management operations",
         },
         {
-            "name": "Agent",
-            "description": "🤖 AI agent initialization and configuration",
-        },
-        {
             "name": "Query",
             "description": "💬 Question answering and document querying",
         },
         {
             "name": "System",
-            "description": "⚙️ System management and configuration",
+            "description": "⚙️ System management, configuration, and AI instructions",
         },
     ],
 )
@@ -249,6 +245,168 @@ class InitResponse(BaseModel):
             }
         }
 
+# Document CRUD Models
+class DocumentInfo(BaseModel):
+    """Document information model"""
+    id: str = Field(description="Unique document identifier")
+    filename: str = Field(description="Original filename")
+    file_type: str = Field(description="File extension (pdf, txt, md)")
+    file_size: Optional[int] = Field(default=None, description="File size in bytes")
+    upload_time: str = Field(description="Upload timestamp (ISO format)")
+    chunk_count: int = Field(description="Number of text chunks")
+    content_preview: Optional[str] = Field(default=None, description="First 200 characters of content")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "doc_12345678",
+                "filename": "research_paper.pdf",
+                "file_type": "pdf",
+                "file_size": 1024000,
+                "upload_time": "2025-10-02T14:30:22.123456",
+                "chunk_count": 15,
+                "content_preview": "This research paper discusses the implementation of..."
+            }
+        }
+
+class DocumentListResponse(BaseModel):
+    """Response model for listing documents"""
+    success: bool = Field(description="Whether the request was successful")
+    documents: List[DocumentInfo] = Field(description="List of document information")
+    total_count: int = Field(description="Total number of documents")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "documents": [
+                    {
+                        "id": "doc_12345678",
+                        "filename": "research_paper.pdf",
+                        "file_type": "pdf",
+                        "file_size": 1024000,
+                        "upload_time": "2025-10-02T14:30:22.123456",
+                        "chunk_count": 15,
+                        "content_preview": "This research paper discusses..."
+                    }
+                ],
+                "total_count": 3
+            }
+        }
+
+class DocumentDeleteResponse(BaseModel):
+    """Response model for document deletion"""
+    success: bool = Field(description="Whether deletion was successful")
+    message: str = Field(description="Deletion result message")
+    deleted_document_id: str = Field(description="ID of the deleted document")
+    remaining_count: int = Field(description="Number of documents remaining")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "message": "Document deleted successfully",
+                "deleted_document_id": "doc_12345678",
+                "remaining_count": 2
+            }
+        }
+
+# Instruction Settings Models
+class InstructionSettings(BaseModel):
+    """Model for system instruction settings"""
+    system_instruction: str = Field(
+        default="คุณเป็น AI ที่ตอบคำถามแบบสั้นมาก ไม่เกิน 300 ตัวอักษรเด็ดขาด ห้ามใช้รายการ ห้ามใช้หัวข้อ ห้ามใช้ดาว ตอบเป็นประโยคเดียวต่อเนื่อง กระชับ ตรงประเด็น เหมาะสำหรับการฟังทางโทร",
+        description="System instruction that guides AI behavior"
+    )
+    response_length: str = Field(
+        default="short",
+        description="Length of responses (short/medium/long/detailed)"
+    )
+    show_similarity_scores: bool = Field(
+        default=True,
+        description="Whether to show similarity scores for retrieved documents"
+    )
+    max_chunks: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum number of document chunks to retrieve"
+    )
+    similarity_threshold: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity score for chunk inclusion"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "system_instruction": "You are an expert research assistant. Provide detailed, accurate answers based on the documents. Always cite sources and explain your reasoning.",
+                "response_length": "detailed",
+                "show_similarity_scores": True,
+                "max_chunks": 8,
+                "similarity_threshold": 0.1
+            }
+        }
+
+class InstructionSettingsResponse(BaseModel):
+    """Response model for instruction settings operations"""
+    success: bool = Field(description="Whether the operation was successful")
+    message: str = Field(description="Operation result message")
+    settings: Optional[InstructionSettings] = Field(default=None, description="Current settings")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "message": "Settings updated successfully",
+                "settings": {
+                    "system_instruction": "You are an expert research assistant...",
+                    "response_length": "detailed",
+                    "show_similarity_scores": True,
+                    "max_chunks": 8,
+                    "similarity_threshold": 0.1
+                }
+            }
+        }
+
+class EnhancedQueryResponse(BaseModel):
+    """Enhanced response model for document queries with similarity scores"""
+    success: bool = Field(description="Whether the query was processed successfully")
+    answer: str = Field(description="AI-generated answer based on the documents")
+    sources: List[str] = Field(default=[], description="List of source documents used")
+    similarity_scores: Optional[List[dict]] = Field(default=None, description="Document chunks with similarity scores")
+    model_used: str = Field(description="The AI model that was used")
+    processing_time: float = Field(description="Time taken to process the query in seconds")
+    chunks_retrieved: int = Field(description="Number of document chunks retrieved")
+    settings_used: Optional[dict] = Field(default=None, description="Settings used for this query")
+    error: Optional[str] = Field(default=None, description="Error message if query failed")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "answer": "Based on the uploaded documents, the main findings include...",
+                "sources": ["document1.pdf", "research_notes.txt"],
+                "similarity_scores": [
+                    {
+                        "source": "document1.pdf",
+                        "content": "This section discusses the main findings...",
+                        "score": 0.89
+                    }
+                ],
+                "model_used": "gpt-4o-mini",
+                "processing_time": 2.34,
+                "chunks_retrieved": 5,
+                "settings_used": {
+                    "response_length": "medium",
+                    "max_chunks": 5
+                },
+                "error": None
+            }
+        }
+
 # System initialization
 class AgenticRAGSystem:
     """Main system class that wraps the core functionality"""
@@ -260,19 +418,161 @@ class AgenticRAGSystem:
         self.model_name = "gpt-4o-mini"
         self.temperature = 0.1
         
+        # Document tracking
+        self.uploaded_documents = {}  # document_id -> DocumentInfo
+        self.document_chunks = {}     # document_id -> list of chunks
+        self.document_counter = 0     # For generating unique IDs
+        
+        # Instruction settings
+        self.settings_file = "instruction_settings.json"
+        self.current_settings = self._load_settings()
+        
         # Try to load existing vector store
         self.vector_store_manager.load_existing_store()
     
-    def add_documents(self, documents):
-        """Add documents to the vector store"""
-        return self.vector_store_manager.add_documents(documents)
+    def _load_settings(self) -> InstructionSettings:
+        """Load instruction settings from JSON file"""
+        try:
+            if os.path.exists(self.settings_file):
+                with open(self.settings_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return InstructionSettings(**data)
+        except Exception as e:
+            print(f"Error loading settings: {e}")
+        
+        # Return default settings if file doesn't exist or error occurred
+        return InstructionSettings()
+    
+    def _save_settings(self, settings: InstructionSettings) -> bool:
+        """Save instruction settings to JSON file"""
+        try:
+            with open(self.settings_file, 'w', encoding='utf-8') as f:
+                json.dump(settings.dict(), f, indent=2, ensure_ascii=False)
+            return True
+        except Exception as e:
+            print(f"Error saving settings: {e}")
+            return False
+    
+    def update_settings(self, settings: InstructionSettings) -> bool:
+        """Update current instruction settings"""
+        if self._save_settings(settings):
+            self.current_settings = settings
+            # Reinitialize agent if it exists to apply new settings
+            if self.agent:
+                self.initialize_agent(self.model_name, self.temperature)
+            return True
+        return False
+    
+    def get_settings(self) -> InstructionSettings:
+        """Get current instruction settings"""
+        return self.current_settings
+    
+    def _get_length_instruction(self, length: str) -> str:
+        """Get instruction based on response length setting"""
+        length_instructions = {
+            "short": "คำสั่งสำคัญ: ตอบให้สั้นที่สุด ไม่เกิน 300 ตัวอักษรเด็ดขาด! ห้ามใช้รายการ ห้ามใช้เลขหัวข้อ ห้ามใช้ขีดกลาง ห้ามใช้ ** ห้ามใช้ดาว ตอบเป็นข้อความเดียวต่อเนื่อง ไม่มีการจัดรูปแบบใดๆ กระชับ ตรงประเด็น เหมาะสำหรับการฟังทางโทร นับตัวอักษรก่อนตอบ หยุดเมื่อถึง 300 ตัวอักษร STOP AT 300 CHARACTERS!",
+            "medium": "Provide a balanced response with key details (2-4 paragraphs).",
+            "long": "Give a comprehensive response with detailed explanations (4-6 paragraphs).",
+            "detailed": "Provide an exhaustive, detailed analysis with all relevant information, examples, and thorough explanations."
+        }
+        return length_instructions.get(length, length_instructions["short"])
+    
+    def _generate_document_id(self) -> str:
+        """Generate a unique document ID"""
+        self.document_counter += 1
+        return f"doc_{self.document_counter:08d}"
+    
+    def add_documents(self, documents, filename: str = None, file_size: int = None):
+        """Add documents to the vector store with tracking"""
+        doc_id = self._generate_document_id()
+        
+        # Determine file type
+        file_type = "unknown"
+        if filename:
+            file_ext = Path(filename).suffix.lower()
+            if file_ext in ['.pdf', '.txt', '.md']:
+                file_type = file_ext[1:]  # Remove the dot
+        
+        # Store document info
+        content_preview = None
+        if documents and len(documents) > 0:
+            # Get preview from first document
+            first_doc_content = documents[0].page_content if hasattr(documents[0], 'page_content') else str(documents[0])
+            content_preview = first_doc_content[:200] + "..." if len(first_doc_content) > 200 else first_doc_content
+        
+        doc_info = DocumentInfo(
+            id=doc_id,
+            filename=filename or f"document_{doc_id}",
+            file_type=file_type,
+            file_size=file_size,
+            upload_time=datetime.now().isoformat(),
+            chunk_count=len(documents),
+            content_preview=content_preview
+        )
+        
+        # Store in tracking dictionaries
+        self.uploaded_documents[doc_id] = doc_info
+        self.document_chunks[doc_id] = documents
+        
+        # Add to vector store
+        result = self.vector_store_manager.add_documents(documents)
+        
+        # Auto-initialize agent if not already initialized
+        if not self.agent and self.get_document_count() > 0:
+            self.initialize_agent()
+        
+        return result
+    
+    def get_documents(self) -> List[DocumentInfo]:
+        """Get list of all uploaded documents"""
+        return list(self.uploaded_documents.values())
+    
+    def get_document(self, doc_id: str) -> Optional[DocumentInfo]:
+        """Get specific document by ID"""
+        return self.uploaded_documents.get(doc_id)
+    
+    def delete_document(self, doc_id: str) -> bool:
+        """Delete a specific document"""
+        if doc_id not in self.uploaded_documents:
+            return False
+        
+        try:
+            # Remove from tracking
+            del self.uploaded_documents[doc_id]
+            if doc_id in self.document_chunks:
+                del self.document_chunks[doc_id]
+            
+            # Note: Vector store doesn't support selective deletion
+            # In a production system, you'd need to rebuild the vector store
+            # For now, we just remove from our tracking
+            
+            return True
+        except Exception as e:
+            print(f"Error deleting document {doc_id}: {e}")
+            return False
+    
+    def clear_all_documents(self) -> bool:
+        """Clear all documents and reset the system"""
+        try:
+            self.uploaded_documents.clear()
+            self.document_chunks.clear()
+            self.document_counter = 0
+            self.agent = None
+            
+            # Reinitialize vector store
+            self.vector_store_manager = VectorStoreManager(persist_directory=self.vectorstore_path)
+            
+            return True
+        except Exception as e:
+            print(f"Error clearing documents: {e}")
+            return False
     
     def get_document_count(self):
         """Get document count"""
-        return self.vector_store_manager.get_document_count()
+        return len(self.uploaded_documents)
     
     def initialize_agent(self, model_name: str = None, temperature: float = None):
-        """Initialize the agent"""
+        """Initialize the agent with current settings"""
         if self.get_document_count() == 0:
             return False
         
@@ -280,6 +580,8 @@ class AgenticRAGSystem:
         self.temperature = temperature or self.temperature
         
         try:
+            # Initialize agent without system_instruction parameter
+            # We'll handle instructions through the query process instead
             self.agent = AgenticRAG(
                 vector_store_manager=self.vector_store_manager,
                 model_name=self.model_name,
@@ -294,11 +596,180 @@ class AgenticRAGSystem:
         """Check if agent is ready"""
         return self.agent is not None
     
-    def query(self, question: str):
-        """Query the system"""
+    def query_with_similarity(self, question: str):
+        """Query the system with similarity scores"""
         if not self.agent:
             raise ValueError("Agent not initialized")
-        return self.agent.query(question)
+        
+        # Get relevant documents with similarity scores
+        try:
+            print(f"🔍 Starting similarity search for: {question}")
+            print(f"📊 Settings: max_chunks={self.current_settings.max_chunks}, threshold={self.current_settings.similarity_threshold}")
+            
+            # Check if vector store is initialized
+            if not self.vector_store_manager.vector_store:
+                print("❌ Vector store not initialized")
+                return {
+                    "success": False,
+                    "answer": "ไม่สามารถตอบคำถามได้ เนื่องจากระบบเก็บข้อมูลยังไม่พร้อม",
+                    "similarity_scores": None,
+                    "chunks_retrieved": 0,
+                    "settings_used": {
+                        "response_length": self.current_settings.response_length,
+                        "max_chunks": self.current_settings.max_chunks,
+                        "similarity_threshold": self.current_settings.similarity_threshold,
+                        "show_similarity_scores": self.current_settings.show_similarity_scores
+                    },
+                    "error": "Vector store not initialized"
+                }
+            
+            # Perform similarity search
+            retriever = self.vector_store_manager.vector_store.as_retriever(
+                search_kwargs={
+                    "k": self.current_settings.max_chunks,
+                    "score_threshold": self.current_settings.similarity_threshold
+                }
+            )
+            
+            # Get documents with scores
+            docs_with_scores = self.vector_store_manager.vector_store.similarity_search_with_score(
+                question, 
+                k=self.current_settings.max_chunks
+            )
+            
+            print(f"📝 Found {len(docs_with_scores)} total documents")
+            for i, (doc, score) in enumerate(docs_with_scores):
+                print(f"   {i+1}. Score: {score:.3f}, Content: {doc.page_content[:100]}...")
+            
+            # Filter by threshold
+            filtered_docs = [
+                (doc, score) for doc, score in docs_with_scores 
+                if score >= self.current_settings.similarity_threshold
+            ]
+            
+            print(f"🎯 After filtering: {len(filtered_docs)} documents above threshold {self.current_settings.similarity_threshold}")
+            
+            # Check if we have relevant documents
+            if len(filtered_docs) == 0:
+                print("❌ No documents passed similarity threshold")
+                return {
+                    "success": False,
+                    "answer": "ไม่สามารถตอบคำถามได้ เนื่องจากไม่พบข้อมูลที่เกี่ยวข้องในเอกสาร",
+                    "similarity_scores": None,
+                    "chunks_retrieved": 0,
+                    "settings_used": {
+                        "response_length": self.current_settings.response_length,
+                        "max_chunks": self.current_settings.max_chunks,
+                        "similarity_threshold": self.current_settings.similarity_threshold,
+                        "show_similarity_scores": self.current_settings.show_similarity_scores
+                    },
+                    "error": "No relevant documents found above similarity threshold"
+                }
+            
+            # Prepare similarity information
+            similarity_info = []
+            if self.current_settings.show_similarity_scores:
+                for doc, score in filtered_docs:
+                    # Try to find source filename
+                    source = "Unknown"
+                    if hasattr(doc, 'metadata') and 'source' in doc.metadata:
+                        source = doc.metadata['source']
+                    elif hasattr(doc, 'metadata') and 'filename' in doc.metadata:
+                        source = doc.metadata['filename']
+                    
+                    similarity_info.append({
+                        "source": source,
+                        "content": doc.page_content[:150] + "..." if len(doc.page_content) > 150 else doc.page_content,
+                        "score": round(float(score), 3)
+                    })
+            
+            # Create enhanced question with instructions
+            enhanced_question = f"""CRITICAL INSTRUCTION - MUST FOLLOW EXACTLY:
+{self.current_settings.system_instruction}
+
+STRICT LENGTH REQUIREMENT - THIS IS MANDATORY:
+{self._get_length_instruction(self.current_settings.response_length)}
+
+RULES YOU MUST FOLLOW:
+- If response_length is "short": MAXIMUM 300 characters, NO EXCEPTIONS
+- NO bullet points, NO numbered lists, NO formatting
+- Write as one continuous paragraph only
+- Count characters before responding
+- Stop writing when you reach the limit
+
+IMPORTANT: Always base your answers on the provided document context and cite your sources clearly.
+
+User Question: {question}"""
+            
+            # Query the agent with enhanced question
+            result = self.agent.query(enhanced_question)
+            
+            # Post-process answer for length control
+            if self.current_settings.response_length == "short":
+                # Enforce strict length limit for short responses
+                original_answer = result["answer"]
+                if len(original_answer) > 300:
+                    # Cut at word boundary near 300 characters
+                    truncated = original_answer[:300]
+                    last_space = truncated.rfind(' ')
+                    if last_space > 250:  # Only cut at space if it's not too early
+                        result["answer"] = truncated[:last_space] + "..."
+                    else:
+                        result["answer"] = truncated[:297] + "..."
+                    print(f"📏 Length enforcement: Cut answer from {len(original_answer)} to {len(result['answer'])} characters")
+            
+            # Add similarity information to result
+            result["similarity_scores"] = similarity_info if self.current_settings.show_similarity_scores else None
+            result["chunks_retrieved"] = len(filtered_docs)
+            result["settings_used"] = {
+                "response_length": self.current_settings.response_length,
+                "max_chunks": self.current_settings.max_chunks,
+                "similarity_threshold": self.current_settings.similarity_threshold,
+                "show_similarity_scores": self.current_settings.show_similarity_scores
+            }
+            
+            return result
+            
+        except Exception as e:
+            # Don't answer when similarity search fails
+            print(f"❌ Error in similarity search: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Check if we have any documents at all
+            if self.get_document_count() == 0:
+                return {
+                    "success": False,
+                    "answer": "ไม่สามารถตอบคำถามได้ เนื่องจากไม่มีเอกสารในระบบ กรุณาอัพโหลดเอกสารก่อน",
+                    "similarity_scores": None,
+                    "chunks_retrieved": 0,
+                    "settings_used": {
+                        "response_length": self.current_settings.response_length,
+                        "max_chunks": self.current_settings.max_chunks,
+                        "similarity_threshold": self.current_settings.similarity_threshold,
+                        "show_similarity_scores": self.current_settings.show_similarity_scores
+                    },
+                    "error": "No documents available in system"
+                }
+            
+            # For other errors, don't answer
+            return {
+                "success": False,
+                "answer": "ไม่สามารถตอบคำถามได้ เนื่องจากเกิดข้อผิดพลาดในการค้นหาข้อมูล",
+                "similarity_scores": None,
+                "chunks_retrieved": 0,
+                "settings_used": {
+                    "response_length": self.current_settings.response_length,
+                    "max_chunks": self.current_settings.max_chunks,
+                    "similarity_threshold": self.current_settings.similarity_threshold,
+                    "show_similarity_scores": self.current_settings.show_similarity_scores
+                },
+                "error": f"Search system error: {str(e)}"
+            }
+    
+    def query(self, question: str):
+        """Legacy query method for backward compatibility"""
+        return self.query_with_similarity(question)
     
     def set_model(self, model_name: str, temperature: float):
         """Set model configuration"""
@@ -505,7 +976,7 @@ async def upload_documents(
                 documents = doc_loader.load_text(temp_path)
             
             if documents:
-                rag_system.add_documents(documents)
+                rag_system.add_documents(documents, filename=file.filename, file_size=file.size)
                 processed_files += 1
         except Exception as e:
             print(f"Error processing {file.filename}: {e}")
@@ -522,102 +993,11 @@ async def upload_documents(
     )
 
 @app.post(
-    "/initialize",
-    response_model=InitResponse,
-    tags=["Agent"],
-    summary="🤖 Initialize AI Agent",
-    description="Initialize the RAG agent with specified model and parameters",
-    responses={
-        200: {
-            "description": "Agent initialized successfully",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "success": True,
-                        "message": "Agent initialized successfully",
-                        "agent_ready": True,
-                        "document_count": 3
-                    }
-                }
-            }
-        },
-        400: {"description": "No documents available"},
-        500: {"description": "System not initialized or agent creation failed"}
-    }
-)
-async def initialize_agent(
-    model: str = Query(
-        default="gpt-4o-mini",
-        description="AI model to use for the agent",
-        examples=["gpt-4o-mini", "gpt-4", "gpt-3.5-turbo"]
-    ),
-    temperature: float = Query(
-        default=0.1,
-        ge=0.0,
-        le=2.0,
-        description="Model temperature (0.0-2.0). Lower values = more focused, higher = more creative"
-    )
-):
-    """🤖 Initialize the RAG agent with specified model and temperature.
-    
-    **Prerequisites:**
-    - At least one document must be uploaded first
-    - OpenAI API key must be configured
-    
-    **Parameters:**
-    - **Model**: Choose from available OpenAI models
-    - **Temperature**: Controls response creativity (0.0 = deterministic, 2.0 = very creative)
-    
-    **Available Models:**
-    - `gpt-3.5-turbo` - Fast and cost-effective
-    - `gpt-4` - High quality reasoning
-    - `gpt-4-turbo` - Latest GPT-4 with improved performance
-    - `gpt-4o` - Optimized for various tasks
-    - `gpt-4o-mini` - Lightweight version (recommended)
-    - `gpt-5-mini` - Next generation model
-    
-    **Temperature Guidelines:**
-    - `0.0-0.3`: Focused, deterministic responses
-    - `0.3-0.7`: Balanced creativity and consistency
-    - `0.7-1.0`: More creative and varied responses
-    - `1.0-2.0`: Highly creative but potentially inconsistent
-    
-    Args:
-        model: AI model to use (default: gpt-4o-mini)
-        temperature: Model temperature 0.0-2.0 (default: 0.1)
-        
-    Returns:
-        InitResponse: Initialization result with agent status
-        
-    Raises:
-        HTTPException:
-            - 400: No documents available
-            - 500: System not initialized or agent creation failed
-    """
-    global rag_system
-    
-    if not rag_system:
-        raise HTTPException(status_code=500, detail="RAG system not initialized")
-    
-    doc_count = rag_system.get_document_count()
-    if doc_count == 0:
-        raise HTTPException(status_code=400, detail="No documents available. Upload documents first.")
-    
-    success = rag_system.initialize_agent(model, temperature)
-    
-    return InitResponse(
-        success=success,
-        message="Agent initialized successfully" if success else "Agent initialization failed",
-        agent_ready=rag_system.is_agent_ready(),
-        document_count=doc_count
-    )
-
-@app.post(
     "/query",
-    response_model=QueryResponse,
+    response_model=EnhancedQueryResponse,
     tags=["Query"],
     summary="💬 Query Documents",
-    description="Ask questions about uploaded documents using AI",
+    description="Ask questions about uploaded documents using AI with enhanced features",
     responses={
         200: {
             "description": "Query processed successfully",
@@ -627,8 +1007,20 @@ async def initialize_agent(
                         "success": True,
                         "answer": "Based on the uploaded documents, the main topics include...",
                         "sources": ["document1.pdf", "notes.txt"],
+                        "similarity_scores": [
+                            {
+                                "source": "document1.pdf",
+                                "content": "This section discusses...",
+                                "score": 0.89
+                            }
+                        ],
                         "model_used": "gpt-4o-mini",
                         "processing_time": 2.34,
+                        "chunks_retrieved": 5,
+                        "settings_used": {
+                            "response_length": "medium",
+                            "max_chunks": 5
+                        },
                         "error": None
                     }
                 }
@@ -663,17 +1055,25 @@ async def query_documents(
         ]
     )
 ):
-    """💬 Ask questions about the uploaded documents using AI.
+    """💬 Ask questions about the uploaded documents using AI with enhanced features.
+    
+    **Enhanced Features:**
+    - **Similarity Scores**: See how closely retrieved chunks match your query
+    - **Custom Instructions**: Responses follow your configured system instructions
+    - **Response Length Control**: Get answers in your preferred length (short/medium/long/detailed)
+    - **Chunk Filtering**: Control how many document chunks are used
     
     **How it works:**
     1. Your question is processed by the AI agent
-    2. Relevant document chunks are retrieved from the vector database
-    3. The AI generates an answer based on the retrieved context
-    4. Sources and metadata are returned with the response
+    2. Relevant document chunks are retrieved based on similarity
+    3. Similarity scores show how well chunks match your query
+    4. AI generates an answer using your configured instructions
+    5. Response length is controlled by your settings
     
     **Prerequisites:**
     - Documents must be uploaded via `/upload`
-    - Agent must be initialized via `/initialize`
+    - Agent will be automatically initialized when documents are uploaded
+    - Optional: Configure instructions via `/settings/instructions`
     
     **Query Types:**
     - **Factual Questions**: "What is mentioned about X?"
@@ -682,22 +1082,19 @@ async def query_documents(
     - **Comparison**: "Compare X and Y from the documents"
     - **Extraction**: "List all mentions of Z"
     
-    **Model Selection:**
-    - Use `gpt-4o-mini` for fast, cost-effective queries
-    - Use `gpt-4` for complex reasoning and analysis
-    - Adjust temperature based on desired creativity level
-    
-    **Response Format:**
+    **Response Components:**
     - **Answer**: AI-generated response based on document content
     - **Sources**: List of documents that contributed to the answer
+    - **Similarity Scores**: How well each chunk matches your query (if enabled)
     - **Processing Time**: Time taken to process the query
-    - **Model Used**: Actual model used for the query
+    - **Chunks Retrieved**: Number of document chunks used
+    - **Settings Used**: Configuration applied to this query
     
     Args:
         request: Query request containing question and model parameters
         
     Returns:
-        QueryResponse: Answer with sources, processing time, and metadata
+        EnhancedQueryResponse: Answer with sources, similarity scores, and metadata
         
     Raises:
         HTTPException:
@@ -712,14 +1109,14 @@ async def query_documents(
         raise HTTPException(status_code=500, detail="RAG system not initialized")
     
     if not rag_system.is_agent_ready():
-        raise HTTPException(status_code=400, detail="Agent not ready. Upload documents and initialize first.")
+        raise HTTPException(status_code=400, detail="Agent not ready. Upload documents first.")
     
     try:
         # Update model settings if different
         rag_system.set_model(request.model, request.temperature)
         
-        # Query the system
-        result = rag_system.query(request.query)
+        # Query the system with similarity scores
+        result = rag_system.query_with_similarity(request.query)
         
         # Calculate processing time
         processing_time = (datetime.now() - start_time).total_seconds()
@@ -732,25 +1129,315 @@ async def query_documents(
             except Exception:
                 sources = []
         
-        return QueryResponse(
+        return EnhancedQueryResponse(
             success=result["success"],
             answer=result["answer"],
             sources=sources,
+            similarity_scores=result.get("similarity_scores"),
             model_used=request.model,
             processing_time=processing_time,
+            chunks_retrieved=result.get("chunks_retrieved", 0),
+            settings_used=result.get("settings_used"),
             error=result.get("error")
         )
         
     except Exception as e:
         processing_time = (datetime.now() - start_time).total_seconds()
-        return QueryResponse(
+        return EnhancedQueryResponse(
             success=False,
             answer=f"Error processing query: {str(e)}",
             sources=[],
+            similarity_scores=None,
             model_used=request.model,
             processing_time=processing_time,
+            chunks_retrieved=0,
+            settings_used=None,
             error=str(e)
         )
+
+# Document CRUD endpoints
+@app.get(
+    "/documents",
+    response_model=DocumentListResponse,
+    tags=["Documents"],
+    summary="📋 List All Documents",
+    description="Get a list of all uploaded documents with metadata",
+    responses={
+        200: {
+            "description": "Documents retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "documents": [
+                            {
+                                "id": "doc_00000001",
+                                "filename": "research_paper.pdf",
+                                "file_type": "pdf",
+                                "file_size": 1024000,
+                                "upload_time": "2025-10-02T14:30:22.123456",
+                                "chunk_count": 15,
+                                "content_preview": "This research paper discusses..."
+                            }
+                        ],
+                        "total_count": 3
+                    }
+                }
+            }
+        },
+        500: {"description": "RAG system not initialized"}
+    }
+)
+async def list_documents():
+    """📋 Get a list of all uploaded documents with metadata.
+    
+    Returns detailed information about each document including:
+    - **Document ID**: Unique identifier for the document
+    - **Filename**: Original filename when uploaded
+    - **File Type**: Type of file (pdf, txt, md)
+    - **File Size**: Size in bytes (if available)
+    - **Upload Time**: Timestamp when document was uploaded
+    - **Chunk Count**: Number of text chunks the document was split into
+    - **Content Preview**: First 200 characters of the document content
+    
+    **Use Cases:**
+    - View all uploaded documents
+    - Get document metadata for management
+    - Check upload status and processing results
+    - Monitor document collection size
+    
+    Returns:
+        DocumentListResponse: List of documents with metadata and total count
+        
+    Raises:
+        HTTPException: 500 if RAG system not initialized
+    """
+    global rag_system
+    
+    if not rag_system:
+        raise HTTPException(status_code=500, detail="RAG system not initialized")
+    
+    documents = rag_system.get_documents()
+    
+    return DocumentListResponse(
+        success=True,
+        documents=documents,
+        total_count=len(documents)
+    )
+
+@app.get(
+    "/documents/{doc_id}",
+    response_model=DocumentInfo,
+    tags=["Documents"],
+    summary="📄 Get Document Details",
+    description="Get detailed information about a specific document",
+    responses={
+        200: {
+            "description": "Document details retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "doc_00000001",
+                        "filename": "research_paper.pdf",
+                        "file_type": "pdf",
+                        "file_size": 1024000,
+                        "upload_time": "2025-10-02T14:30:22.123456",
+                        "chunk_count": 15,
+                        "content_preview": "This research paper discusses the implementation..."
+                    }
+                }
+            }
+        },
+        404: {"description": "Document not found"},
+        500: {"description": "RAG system not initialized"}
+    }
+)
+async def get_document(doc_id: str):
+    """📄 Get detailed information about a specific document.
+    
+    Retrieve comprehensive metadata for a single document including:
+    - **Processing Details**: How the document was chunked and processed
+    - **Content Information**: Preview of document content
+    - **Upload Metadata**: When and how the document was uploaded
+    - **System Integration**: How it fits into the RAG system
+    
+    **Use Cases:**
+    - View detailed document information
+    - Verify document processing results
+    - Debug document-related issues
+    - Get content preview before querying
+    
+    Args:
+        doc_id: Unique document identifier (e.g., "doc_00000001")
+        
+    Returns:
+        DocumentInfo: Complete document metadata and information
+        
+    Raises:
+        HTTPException:
+            - 404: Document not found with the specified ID
+            - 500: RAG system not initialized
+    """
+    global rag_system
+    
+    if not rag_system:
+        raise HTTPException(status_code=500, detail="RAG system not initialized")
+    
+    document = rag_system.get_document(doc_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    return document
+
+@app.delete(
+    "/documents/{doc_id}",
+    response_model=DocumentDeleteResponse,
+    tags=["Documents"],
+    summary="🗑️ Delete Document",
+    description="Delete a specific document from the system",
+    responses={
+        200: {
+            "description": "Document deleted successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Document deleted successfully",
+                        "deleted_document_id": "doc_00000001",
+                        "remaining_count": 2
+                    }
+                }
+            }
+        },
+        404: {"description": "Document not found"},
+        500: {"description": "RAG system not initialized or deletion failed"}
+    }
+)
+async def delete_document(doc_id: str):
+    """🗑️ Delete a specific document from the system.
+    
+    **This operation will:**
+    - Remove the document from the tracking system
+    - Clear associated text chunks from memory
+    - Update document count and statistics
+    - Reset the AI agent if this was the last document
+    
+    **Important Notes:**
+    - The vector embeddings remain in the vector store (limitation of current implementation)
+    - If this is the last document, the AI agent will be reset
+    - This action cannot be undone
+    
+    **Use Cases:**
+    - Remove outdated or incorrect documents
+    - Clean up test uploads
+    - Manage document collection size
+    - Remove sensitive content
+    
+    Args:
+        doc_id: Unique document identifier to delete
+        
+    Returns:
+        DocumentDeleteResponse: Deletion result with remaining document count
+        
+    Raises:
+        HTTPException:
+            - 404: Document not found with the specified ID
+            - 500: RAG system not initialized or deletion operation failed
+    """
+    global rag_system
+    
+    if not rag_system:
+        raise HTTPException(status_code=500, detail="RAG system not initialized")
+    
+    # Check if document exists
+    if not rag_system.get_document(doc_id):
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    success = rag_system.delete_document(doc_id)
+    
+    if success:
+        # Reset agent if no documents remain
+        if rag_system.get_document_count() == 0:
+            rag_system.agent = None
+        
+        return DocumentDeleteResponse(
+            success=True,
+            message="Document deleted successfully",
+            deleted_document_id=doc_id,
+            remaining_count=len(rag_system.get_documents())
+        )
+    else:
+        raise HTTPException(status_code=500, detail="Failed to delete document")
+
+@app.delete(
+    "/documents",
+    tags=["Documents"],
+    summary="🗑️ Delete All Documents",
+    description="Delete all documents from the system",
+    responses={
+        200: {
+            "description": "All documents deleted successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "All documents deleted successfully",
+                        "deleted_count": 5
+                    }
+                }
+            }
+        },
+        500: {"description": "RAG system not initialized or deletion failed"}
+    }
+)
+async def delete_all_documents():
+    """🗑️ Delete all documents from the system.
+    
+    **This operation will:**
+    - Remove all uploaded documents and their metadata
+    - Clear all text chunks from memory
+    - Reset the vector store completely
+    - Reset the AI agent
+    - Clear all system memory and cache
+    
+    **Warning:** This action cannot be undone. All uploaded documents and their processing results will be permanently lost.
+    
+    **Use Cases:**
+    - Start fresh with a new document collection
+    - Clear system for new projects
+    - Reset system after errors or issues
+    - Development and testing cleanup
+    
+    **System Impact:**
+    - Document count will be reset to 0
+    - Agent will need to be reinitialized after new uploads
+    - All queries will fail until new documents are uploaded
+    
+    Returns:
+        dict: Success message with count of deleted documents
+        
+    Raises:
+        HTTPException:
+            - 500: RAG system not initialized or deletion operation failed
+    """
+    global rag_system
+    
+    if not rag_system:
+        raise HTTPException(status_code=500, detail="RAG system not initialized")
+    
+    # Get count before deletion
+    deleted_count = rag_system.get_document_count()
+    
+    success = rag_system.clear_all_documents()
+    
+    if success:
+        return {
+            "success": True, 
+            "message": "All documents deleted successfully",
+            "deleted_count": deleted_count
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Failed to delete all documents")
 
 @app.post(
     "/reset",
@@ -874,6 +1561,206 @@ async def get_available_models():
             "latest_features": "gpt-5-mini"
         }
     }
+
+# Instruction Settings endpoints
+@app.post(
+    "/settings/instructions",
+    response_model=InstructionSettingsResponse,
+    tags=["System"],
+    summary="⚙️ Set AI Instructions",
+    description="Configure AI behavior, response length, and similarity settings",
+    responses={
+        200: {
+            "description": "Settings updated successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Settings updated successfully",
+                        "settings": {
+                            "system_instruction": "You are an expert research assistant...",
+                            "response_length": "detailed",
+                            "show_similarity_scores": True,
+                            "max_chunks": 8,
+                            "similarity_threshold": 0.1
+                        }
+                    }
+                }
+            }
+        },
+        500: {"description": "Error updating settings"}
+    }
+)
+async def set_instruction_settings(
+    settings: InstructionSettings = Body(
+        ...,
+        examples=[
+            {
+                "summary": "Research Assistant",
+                "description": "Configure as a research assistant with detailed responses",
+                "value": {
+                    "system_instruction": "You are an expert research assistant. Provide detailed, accurate answers based on the documents. Always cite sources and explain your reasoning step by step.",
+                    "response_length": "detailed",
+                    "show_similarity_scores": True,
+                    "max_chunks": 8,
+                    "similarity_threshold": 0.1
+                }
+            },
+            {
+                "summary": "Quick Summarizer for Phone Calls",
+                "description": "Configure for very short responses (300 characters max) suitable for phone conversations",
+                "value": {
+                    "system_instruction": "คุณเป็น AI ที่ตอบคำถามแบบสั้นมาก ไม่เกิน 300 ตัวอักษรเด็ดขาด ห้ามใช้รายการ ห้ามใช้หัวข้อ ห้ามใช้ดาว ตอบเป็นประโยคเดียวต่อเนื่อง กระชับ ตรงประเด็น",
+                    "response_length": "short",
+                    "show_similarity_scores": False,
+                    "max_chunks": 2,
+                    "similarity_threshold": 0.3
+                }
+            }
+        ]
+    )
+):
+    """⚙️ Configure AI behavior, response length, and similarity settings.
+    
+    **System Instructions:**
+    Set how the AI should behave and respond to queries. This affects:
+    - Response tone and style
+    - Level of detail and explanation
+    - How sources are cited
+    - Overall AI personality
+    
+    **Response Length Options:**
+    - **short**: ประโยคสั้น กระชับ 300 ตัวอักษร เหมาะสำหรับการฟังระหว่างโทร
+    - **medium**: Balanced response, 2-4 paragraphs
+    - **long**: Comprehensive response, 4-6 paragraphs
+    - **detailed**: Exhaustive analysis with all relevant information
+    
+    **Similarity Settings:**
+    - **show_similarity_scores**: Display how well chunks match queries
+    - **max_chunks**: Maximum document chunks to retrieve (1-20)
+    - **similarity_threshold**: Minimum similarity score (0.0-1.0)
+    
+    **Configuration Persistence:**
+    - Settings are saved to `instruction_settings.json`
+    - Persists across server restarts
+    - Applied to all future queries until changed
+    - Automatically reapplied when agent is reinitialized
+    
+    **Use Cases:**
+    - Academic research (detailed, citing sources)
+    - Business analysis (professional, action-oriented)
+    - Quick Q&A (concise, direct answers)
+    - Educational content (explanatory, step-by-step)
+    
+    Args:
+        settings: New instruction settings configuration
+        
+    Returns:
+        InstructionSettingsResponse: Success status and updated settings
+        
+    Raises:
+        HTTPException:
+            - 500: Error saving settings or system not initialized
+    """
+    global rag_system
+    
+    if not rag_system:
+        raise HTTPException(status_code=500, detail="RAG system not initialized")
+    
+    try:
+        success = rag_system.update_settings(settings)
+        
+        if success:
+            return InstructionSettingsResponse(
+                success=True,
+                message="Settings updated successfully. Changes will apply to future queries.",
+                settings=settings
+            )
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save settings")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating settings: {str(e)}")
+
+@app.get(
+    "/settings/instructions",
+    response_model=InstructionSettingsResponse,
+    tags=["System"],
+    summary="👁️ Get AI Instructions",
+    description="View current AI behavior and similarity settings",
+    responses={
+        200: {
+            "description": "Settings retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Current settings retrieved",
+                        "settings": {
+                            "system_instruction": "You are a helpful AI assistant...",
+                            "response_length": "medium",
+                            "show_similarity_scores": True,
+                            "max_chunks": 5,
+                            "similarity_threshold": 0.0
+                        }
+                    }
+                }
+            }
+        },
+        500: {"description": "Error retrieving settings"}
+    }
+)
+async def get_instruction_settings():
+    """👁️ View current AI behavior and similarity settings.
+    
+    **Returns Current Configuration:**
+    - **System Instruction**: How AI is configured to behave
+    - **Response Length**: Length setting for responses
+    - **Similarity Display**: Whether similarity scores are shown
+    - **Chunk Limits**: Maximum chunks and similarity threshold
+    
+    **Configuration Sources:**
+    - Loaded from `instruction_settings.json` if exists
+    - Default values if no custom configuration
+    - Real-time settings currently in use
+    
+    **Use Cases:**
+    - Verify current AI configuration
+    - Check response length settings
+    - Review similarity search parameters
+    - Audit system behavior settings
+    - Debug query behavior issues
+    
+    **Response Information:**
+    - Current system instruction text
+    - Response length preference
+    - Similarity score display preference
+    - Document retrieval limits
+    - Similarity filtering threshold
+    
+    Returns:
+        InstructionSettingsResponse: Current settings and status
+        
+    Raises:
+        HTTPException:
+            - 500: Error retrieving settings or system not initialized
+    """
+    global rag_system
+    
+    if not rag_system:
+        raise HTTPException(status_code=500, detail="RAG system not initialized")
+    
+    try:
+        current_settings = rag_system.get_settings()
+        
+        return InstructionSettingsResponse(
+            success=True,
+            message="Current settings retrieved successfully",
+            settings=current_settings
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving settings: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8003)
