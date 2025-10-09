@@ -36,7 +36,7 @@ def create_rag_tools(vector_store_manager: VectorStoreManager) -> List[Tool]:
         except Exception as e:
             return f"Error searching documents: {str(e)}"
     
-    def get_document_count() -> str:
+    def get_document_count(query: str = "") -> str:
         """Get the number of documents in the knowledge base."""
         try:
             count = vector_store_manager.get_document_count()

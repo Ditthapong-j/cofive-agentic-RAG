@@ -161,13 +161,23 @@ class QueryRequest(BaseModel):
         le=2.0, 
         description="Model temperature (0.0=focused, 2.0=creative)"
     )
+    tags: Optional[List[str]] = Field(
+        default=None,
+        description="Filter documents by tags (e.g., ['research', 'AI'])"
+    )
+    metadata_filter: Optional[dict] = Field(
+        default=None,
+        description="Filter documents by metadata (e.g., {'author': 'John', 'year': 2024})"
+    )
 
     class Config:
         json_schema_extra = {
             "example": {
                 "query": "What are the main findings in the uploaded research papers?",
                 "model": "gpt-4o-mini",
-                "temperature": 0.1
+                "temperature": 0.1,
+                "tags": ["research", "AI"],
+                "metadata_filter": {"year": 2024, "category": "technical"}
             }
         }
 
@@ -208,6 +218,30 @@ class SystemStatus(BaseModel):
                 "agent_ready": True,
                 "api_key_configured": True,
                 "version": "1.0.0"
+            }
+        }
+
+class DocumentUploadRequest(BaseModel):
+    """Request model for document upload with metadata"""
+    tags: Optional[List[str]] = Field(
+        default=None,
+        description="Tags to categorize the document (e.g., ['research', 'AI', 'technical'])"
+    )
+    metadata: Optional[dict] = Field(
+        default=None,
+        description="Additional metadata for the document (e.g., {'author': 'John', 'year': 2024})"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "tags": ["research", "AI", "machine-learning"],
+                "metadata": {
+                    "author": "John Doe",
+                    "year": 2024,
+                    "category": "technical",
+                    "department": "R&D"
+                }
             }
         }
 
@@ -255,6 +289,8 @@ class DocumentInfo(BaseModel):
     upload_time: str = Field(description="Upload timestamp (ISO format)")
     chunk_count: int = Field(description="Number of text chunks")
     content_preview: Optional[str] = Field(default=None, description="First 200 characters of content")
+    tags: Optional[List[str]] = Field(default=None, description="Document tags")
+    metadata: Optional[dict] = Field(default=None, description="Document metadata")
 
     class Config:
         json_schema_extra = {
@@ -265,7 +301,9 @@ class DocumentInfo(BaseModel):
                 "file_size": 1024000,
                 "upload_time": "2025-10-02T14:30:22.123456",
                 "chunk_count": 15,
-                "content_preview": "This research paper discusses the implementation of..."
+                "content_preview": "This research paper discusses the implementation of...",
+                "tags": ["research", "AI", "machine-learning"],
+                "metadata": {"author": "John Doe", "year": 2024}
             }
         }
 
@@ -427,6 +465,9 @@ class AgenticRAGSystem:
         self.settings_file = "instruction_settings.json"
         self.current_settings = self._load_settings()
         
+        # Performance optimization: Cache for metadata lookups
+        self._metadata_cache = {}
+        
         # Try to load existing vector store
         self.vector_store_manager.load_existing_store()
     
@@ -440,8 +481,14 @@ class AgenticRAGSystem:
         except Exception as e:
             print(f"Error loading settings: {e}")
         
-        # Return default settings if file doesn't exist or error occurred
-        return InstructionSettings()
+        # Return optimized default settings for speed (2-3 seconds target)
+        return InstructionSettings(
+            system_instruction="คุณเป็น AI ที่ตอบคำถามแบบสั้นกระชับ ตรงประเด็น อ้างอิงจากเอกสารที่มี",
+            response_length="short",
+            show_similarity_scores=False,
+            max_chunks=3,
+            similarity_threshold=0.2
+        )
     
     def _save_settings(self, settings: InstructionSettings) -> bool:
         """Save instruction settings to JSON file"""
@@ -482,8 +529,8 @@ class AgenticRAGSystem:
         self.document_counter += 1
         return f"doc_{self.document_counter:08d}"
     
-    def add_documents(self, documents, filename: str = None, file_size: int = None):
-        """Add documents to the vector store with tracking"""
+    def add_documents(self, documents, filename: str = None, file_size: int = None, tags: List[str] = None, metadata: dict = None):
+        """Add documents to the vector store with tracking (optimized)"""
         doc_id = self._generate_document_id()
         
         # Determine file type
@@ -492,6 +539,24 @@ class AgenticRAGSystem:
             file_ext = Path(filename).suffix.lower()
             if file_ext in ['.pdf', '.txt', '.md']:
                 file_type = file_ext[1:]  # Remove the dot
+        
+        # Prepare metadata once for all chunks (optimization)
+        common_metadata = {
+            'document_id': doc_id,
+            'filename': filename or f"document_{doc_id}"
+        }
+        
+        if tags:
+            common_metadata['tags'] = tags
+        
+        if metadata:
+            common_metadata.update(metadata)
+        
+        # Add metadata to all chunks efficiently
+        for doc in documents:
+            if not hasattr(doc, 'metadata') or doc.metadata is None:
+                doc.metadata = {}
+            doc.metadata.update(common_metadata)
         
         # Store document info
         content_preview = None
@@ -507,12 +572,21 @@ class AgenticRAGSystem:
             file_size=file_size,
             upload_time=datetime.now().isoformat(),
             chunk_count=len(documents),
-            content_preview=content_preview
+            content_preview=content_preview,
+            tags=tags,
+            metadata=metadata
         )
         
         # Store in tracking dictionaries
         self.uploaded_documents[doc_id] = doc_info
         self.document_chunks[doc_id] = documents
+        
+        # Cache metadata for fast lookups
+        if tags or metadata:
+            self._metadata_cache[doc_id] = {
+                'tags': tags or [],
+                'metadata': metadata or {}
+            }
         
         # Add to vector store
         result = self.vector_store_manager.add_documents(documents)
@@ -558,6 +632,7 @@ class AgenticRAGSystem:
             self.document_chunks.clear()
             self.document_counter = 0
             self.agent = None
+            self._metadata_cache.clear()  # Clear cache
             
             # Reinitialize vector store
             self.vector_store_manager = VectorStoreManager(persist_directory=self.vectorstore_path)
@@ -596,19 +671,15 @@ class AgenticRAGSystem:
         """Check if agent is ready"""
         return self.agent is not None
     
-    def query_with_similarity(self, question: str):
-        """Query the system with similarity scores"""
+    def query_with_similarity(self, question: str, tags: List[str] = None, metadata_filter: dict = None):
+        """Query the system with similarity scores and optional filtering (optimized)"""
         if not self.agent:
             raise ValueError("Agent not initialized")
         
         # Get relevant documents with similarity scores
         try:
-            print(f"🔍 Starting similarity search for: {question}")
-            print(f"📊 Settings: max_chunks={self.current_settings.max_chunks}, threshold={self.current_settings.similarity_threshold}")
-            
             # Check if vector store is initialized
             if not self.vector_store_manager.vector_store:
-                print("❌ Vector store not initialized")
                 return {
                     "success": False,
                     "answer": "ไม่สามารถตอบคำถามได้ เนื่องจากระบบเก็บข้อมูลยังไม่พร้อม",
@@ -623,35 +694,57 @@ class AgenticRAGSystem:
                     "error": "Vector store not initialized"
                 }
             
-            # Perform similarity search
-            retriever = self.vector_store_manager.vector_store.as_retriever(
-                search_kwargs={
-                    "k": self.current_settings.max_chunks,
-                    "score_threshold": self.current_settings.similarity_threshold
-                }
-            )
+            # Optimize: Only get more docs if filtering is needed
+            search_k = self.current_settings.max_chunks
+            if tags or metadata_filter:
+                # Get 2x docs only when filtering to ensure we have enough after filtering
+                search_k = min(self.current_settings.max_chunks * 2, 20)  # Cap at 20 to prevent slowdown
             
-            # Get documents with scores
+            # Perform similarity search with optimized k
             docs_with_scores = self.vector_store_manager.vector_store.similarity_search_with_score(
                 question, 
-                k=self.current_settings.max_chunks
+                k=search_k
             )
             
-            print(f"📝 Found {len(docs_with_scores)} total documents")
-            for i, (doc, score) in enumerate(docs_with_scores):
-                print(f"   {i+1}. Score: {score:.3f}, Content: {doc.page_content[:100]}...")
+            # Fast filtering by tags and metadata if provided
+            if tags or metadata_filter:
+                filtered_docs = []
+                for doc, score in docs_with_scores:
+                    # Early threshold check for speed
+                    if score < self.current_settings.similarity_threshold:
+                        continue
+                    
+                    doc_metadata = getattr(doc, 'metadata', {})
+                    
+                    # Check tags (fast OR check)
+                    if tags:
+                        doc_tags = doc_metadata.get('tags', [])
+                        if not doc_tags or not any(tag in doc_tags for tag in tags):
+                            continue
+                    
+                    # Check metadata filter (fast AND check)
+                    if metadata_filter:
+                        if not all(doc_metadata.get(k) == v for k, v in metadata_filter.items()):
+                            continue
+                    
+                    filtered_docs.append((doc, score))
+                    
+                    # Stop early if we have enough results
+                    if len(filtered_docs) >= self.current_settings.max_chunks:
+                        break
+                
+                docs_with_scores = filtered_docs
+            else:
+                # No filtering - just apply threshold
+                docs_with_scores = [
+                    (doc, score) for doc, score in docs_with_scores 
+                    if score >= self.current_settings.similarity_threshold
+                ][:self.current_settings.max_chunks]
             
-            # Filter by threshold
-            filtered_docs = [
-                (doc, score) for doc, score in docs_with_scores 
-                if score >= self.current_settings.similarity_threshold
-            ]
-            
-            print(f"🎯 After filtering: {len(filtered_docs)} documents above threshold {self.current_settings.similarity_threshold}")
+            filtered_docs = docs_with_scores
             
             # Check if we have relevant documents
             if len(filtered_docs) == 0:
-                print("❌ No documents passed similarity threshold")
                 return {
                     "success": False,
                     "answer": "ไม่สามารถตอบคำถามได้ เนื่องจากไม่พบข้อมูลที่เกี่ยวข้องในเอกสาร",
@@ -666,21 +759,26 @@ class AgenticRAGSystem:
                     "error": "No relevant documents found above similarity threshold"
                 }
             
-            # Prepare similarity information
+            # Prepare similarity information (optimized)
             similarity_info = []
             if self.current_settings.show_similarity_scores:
                 for doc, score in filtered_docs:
-                    # Try to find source filename
-                    source = "Unknown"
-                    if hasattr(doc, 'metadata') and 'source' in doc.metadata:
-                        source = doc.metadata['source']
-                    elif hasattr(doc, 'metadata') and 'filename' in doc.metadata:
-                        source = doc.metadata['filename']
+                    doc_metadata = getattr(doc, 'metadata', {})
+                    
+                    # Extract info efficiently
+                    source = doc_metadata.get('filename') or doc_metadata.get('source', 'Unknown')
+                    doc_tags = doc_metadata.get('tags')
+                    
+                    # Extract custom metadata (exclude system fields) - optimized
+                    system_fields = {'source', 'filename', 'document_id', 'tags'}
+                    doc_metadata_filtered = {k: v for k, v in doc_metadata.items() if k not in system_fields} if doc_metadata else None
                     
                     similarity_info.append({
                         "source": source,
                         "content": doc.page_content[:150] + "..." if len(doc.page_content) > 150 else doc.page_content,
-                        "score": round(float(score), 3)
+                        "score": round(float(score), 3),
+                        "tags": doc_tags,
+                        "metadata": doc_metadata_filtered if doc_metadata_filtered else None
                     })
             
             # Create enhanced question with instructions
@@ -716,7 +814,6 @@ User Question: {question}"""
                         result["answer"] = truncated[:last_space] + "..."
                     else:
                         result["answer"] = truncated[:297] + "..."
-                    print(f"📏 Length enforcement: Cut answer from {len(original_answer)} to {len(result['answer'])} characters")
             
             # Add similarity information to result
             result["similarity_scores"] = similarity_info if self.current_settings.show_similarity_scores else None
@@ -732,7 +829,6 @@ User Question: {question}"""
             
         except Exception as e:
             # Don't answer when similarity search fails
-            print(f"❌ Error in similarity search: {e}")
             import traceback
             traceback.print_exc()
             
@@ -767,9 +863,9 @@ User Question: {question}"""
                 "error": f"Search system error: {str(e)}"
             }
     
-    def query(self, question: str):
+    def query(self, question: str, tags: List[str] = None, metadata_filter: dict = None):
         """Legacy query method for backward compatibility"""
-        return self.query_with_similarity(question)
+        return self.query_with_similarity(question, tags=tags, metadata_filter=metadata_filter)
     
     def set_model(self, model_name: str, temperature: float):
         """Set model configuration"""
@@ -878,7 +974,7 @@ async def get_system_status():
     response_model=UploadResponse,
     tags=["Documents"],
     summary="📤 Upload Documents",
-    description="Upload one or more documents to the system for processing",
+    description="Upload one or more documents to the system for processing with optional tags and metadata",
     responses={
         200: {
             "description": "Documents uploaded successfully",
@@ -913,29 +1009,53 @@ async def upload_documents(
                 "value": "notes.txt"
             }
         ]
+    ),
+    tags: Optional[str] = Query(
+        default=None,
+        description="Comma-separated tags (e.g., 'research,AI,technical')"
+    ),
+    metadata: Optional[str] = Query(
+        default=None,
+        description="JSON string of metadata (e.g., '{\"author\":\"John\",\"year\":2024}')"
     )
 ):
-    """📤 Upload one or more documents to the system.
+    """📤 Upload one or more documents to the system with optional tags and metadata.
     
     **Supported file types:**
     - 📄 **PDF** (.pdf) - Portable Document Format
     - 📝 **Text** (.txt) - Plain text files
     - 📋 **Markdown** (.md) - Markdown formatted text
     
+    **Tags and Metadata:**
+    - **Tags**: Categories for easy filtering (e.g., 'research', 'AI', 'technical')
+    - **Metadata**: Additional information (e.g., author, year, department, category)
+    - Both are optional but recommended for better organization and filtering
+    
     **Process:**
     1. Files are validated for supported formats
     2. Content is extracted and processed
     3. Documents are split into chunks
-    4. Chunks are embedded and stored in vector database
+    4. Tags and metadata are attached to each chunk
+    5. Chunks are embedded and stored in vector database
     
     **Features:**
     - Multiple file upload support
     - Automatic content extraction
     - Smart text chunking
     - Vector embedding generation
+    - Tag and metadata support for filtering
+    
+    **Example Usage:**
+    ```
+    curl -X POST "http://localhost:8003/upload?tags=research,AI&metadata={\"author\":\"John\",\"year\":2024}" \
+         -F "files=@paper1.pdf" \
+         -F "files=@paper2.pdf"
+    ```
     
     Args:
         files: List of files to upload (multipart/form-data)
+        tags: Comma-separated tags (optional)
+        metadata: JSON string of metadata (optional)
         
     Returns:
         UploadResponse: Upload results with processing statistics
@@ -952,6 +1072,19 @@ async def upload_documents(
     
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
+    
+    # Parse tags
+    tags_list = None
+    if tags:
+        tags_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
+    
+    # Parse metadata
+    metadata_dict = None
+    if metadata:
+        try:
+            metadata_dict = json.loads(metadata)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid metadata JSON format")
     
     processed_files = 0
     total_docs_before = rag_system.get_document_count()
@@ -976,7 +1109,13 @@ async def upload_documents(
                 documents = doc_loader.load_text(temp_path)
             
             if documents:
-                rag_system.add_documents(documents, filename=file.filename, file_size=file.size)
+                rag_system.add_documents(
+                    documents, 
+                    filename=file.filename, 
+                    file_size=file.size,
+                    tags=tags_list,
+                    metadata=metadata_dict
+                )
                 processed_files += 1
         except Exception as e:
             print(f"Error processing {file.filename}: {e}")
@@ -997,7 +1136,7 @@ async def upload_documents(
     response_model=EnhancedQueryResponse,
     tags=["Query"],
     summary="💬 Query Documents",
-    description="Ask questions about uploaded documents using AI with enhanced features",
+    description="Ask questions about uploaded documents using AI with enhanced features including tag and metadata filtering",
     responses={
         200: {
             "description": "Query processed successfully",
@@ -1011,7 +1150,9 @@ async def upload_documents(
                             {
                                 "source": "document1.pdf",
                                 "content": "This section discusses...",
-                                "score": 0.89
+                                "score": 0.89,
+                                "tags": ["research", "AI"],
+                                "metadata": {"author": "John", "year": 2024}
                             }
                         ],
                         "model_used": "gpt-4o-mini",
@@ -1044,12 +1185,36 @@ async def query_documents(
                 }
             },
             {
-                "summary": "Creative Query",
-                "description": "Ask for creative analysis with higher temperature",
+                "summary": "Filtered by Tags",
+                "description": "Ask a question and filter by specific tags",
                 "value": {
-                    "query": "Summarize the key insights and provide actionable recommendations",
+                    "query": "What are the key findings in AI research?",
+                    "model": "gpt-4o-mini",
+                    "temperature": 0.1,
+                    "tags": ["research", "AI"],
+                    "metadata_filter": None
+                }
+            },
+            {
+                "summary": "Filtered by Metadata",
+                "description": "Ask a question and filter by metadata",
+                "value": {
+                    "query": "What did John write about?",
+                    "model": "gpt-4o-mini",
+                    "temperature": 0.1,
+                    "tags": None,
+                    "metadata_filter": {"author": "John", "year": 2024}
+                }
+            },
+            {
+                "summary": "Creative Query with Filters",
+                "description": "Ask for creative analysis with filtering",
+                "value": {
+                    "query": "Summarize the key insights and provide recommendations",
                     "model": "gpt-4",
-                    "temperature": 0.7
+                    "temperature": 0.7,
+                    "tags": ["technical"],
+                    "metadata_filter": {"department": "R&D"}
                 }
             }
         ]
@@ -1058,6 +1223,8 @@ async def query_documents(
     """💬 Ask questions about the uploaded documents using AI with enhanced features.
     
     **Enhanced Features:**
+    - **Tag Filtering**: Search only within documents with specific tags
+    - **Metadata Filtering**: Search only within documents matching metadata criteria
     - **Similarity Scores**: See how closely retrieved chunks match your query
     - **Custom Instructions**: Responses follow your configured system instructions
     - **Response Length Control**: Get answers in your preferred length (short/medium/long/detailed)
@@ -1065,10 +1232,16 @@ async def query_documents(
     
     **How it works:**
     1. Your question is processed by the AI agent
-    2. Relevant document chunks are retrieved based on similarity
-    3. Similarity scores show how well chunks match your query
-    4. AI generates an answer using your configured instructions
-    5. Response length is controlled by your settings
+    2. Documents are filtered by tags and/or metadata (if specified)
+    3. Relevant document chunks are retrieved based on similarity
+    4. Similarity scores show how well chunks match your query
+    5. AI generates an answer using your configured instructions
+    6. Response length is controlled by your settings
+    
+    **Filtering Options:**
+    - **Tags**: Filter documents by one or more tags (e.g., ["research", "AI"])
+    - **Metadata**: Filter documents by metadata key-value pairs (e.g., {"author": "John", "year": 2024})
+    - **Combined**: Use both tags and metadata for precise filtering
     
     **Prerequisites:**
     - Documents must be uploaded via `/upload`
@@ -1081,20 +1254,33 @@ async def query_documents(
     - **Analysis**: "What are the key insights?"
     - **Comparison**: "Compare X and Y from the documents"
     - **Extraction**: "List all mentions of Z"
+    - **Filtered Queries**: "What did [author] write about [topic]?"
     
     **Response Components:**
     - **Answer**: AI-generated response based on document content
     - **Sources**: List of documents that contributed to the answer
     - **Similarity Scores**: How well each chunk matches your query (if enabled)
+    - **Tags & Metadata**: Tags and metadata of retrieved chunks (if show_similarity_scores is enabled)
     - **Processing Time**: Time taken to process the query
     - **Chunks Retrieved**: Number of document chunks used
     - **Settings Used**: Configuration applied to this query
     
+    **Example with Filtering:**
+    ```json
+    {
+      "query": "What are the main findings?",
+      "model": "gpt-4o-mini",
+      "temperature": 0.1,
+      "tags": ["research", "AI"],
+      "metadata_filter": {"year": 2024, "category": "technical"}
+    }
+    ```
+    
     Args:
-        request: Query request containing question and model parameters
+        request: Query request containing question, model parameters, and optional filters
         
     Returns:
-        EnhancedQueryResponse: Answer with sources, similarity scores, and metadata
+        EnhancedQueryResponse: Answer with sources, similarity scores, tags, metadata, and filtering info
         
     Raises:
         HTTPException:
@@ -1115,8 +1301,12 @@ async def query_documents(
         # Update model settings if different
         rag_system.set_model(request.model, request.temperature)
         
-        # Query the system with similarity scores
-        result = rag_system.query_with_similarity(request.query)
+        # Query the system with similarity scores and filters
+        result = rag_system.query_with_similarity(
+            request.query,
+            tags=request.tags,
+            metadata_filter=request.metadata_filter
+        )
         
         # Calculate processing time
         processing_time = (datetime.now() - start_time).total_seconds()

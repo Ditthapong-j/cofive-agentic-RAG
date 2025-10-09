@@ -93,14 +93,15 @@ Always be helpful, accurate, and cite your sources when possible."""),
                 prompt=prompt
             )
             
-            # Create agent executor
+            # Create agent executor with optimized settings for speed
             agent_executor = AgentExecutor(
                 agent=agent,
                 tools=self.tools,
                 memory=self.memory,
-                verbose=True,
+                verbose=False,  # Disable verbose for faster execution
                 handle_parsing_errors=True,
-                max_iterations=5
+                max_iterations=3,  # Reduced from 5 to 3 for faster response
+                early_stopping_method="generate"  # Stop early when possible
             )
             
             return agent_executor
@@ -119,6 +120,9 @@ Always be helpful, accurate, and cite your sources when possible."""),
         Returns:
             Dictionary containing response and metadata
         """
+        import time
+        start_time = time.time()
+        
         if not DEPENDENCIES_AVAILABLE:
             return {
                 "answer": "AgenticRAG system not available. Please install required dependencies.",
@@ -138,21 +142,31 @@ Always be helpful, accurate, and cite your sources when possible."""),
         try:
             # Execute the agent
             logging.info(f"Processing query: {question[:50]}...")
+            agent_start = time.time()
             result = self.agent_executor.invoke({"input": question})
+            agent_time = time.time() - agent_start
             
             # Extract information
             answer = result.get("output", "No answer generated")
             
             # Try to extract sources from tool calls or memory
+            sources_start = time.time()
             sources = self._extract_sources_from_memory()
+            sources_time = time.time() - sources_start
             
-            logging.info(f"Query processed successfully. Answer length: {len(answer)} chars")
+            total_time = time.time() - start_time
+            logging.info(f"Query completed in {total_time:.2f}s (Agent: {agent_time:.2f}s, Sources: {sources_time:.2f}s)")
             
             return {
                 "answer": answer,
                 "sources": sources,
                 "model": self.model_name,
-                "success": True
+                "success": True,
+                "timing": {
+                    "total": f"{total_time:.2f}s",
+                    "agent": f"{agent_time:.2f}s",
+                    "sources": f"{sources_time:.2f}s"
+                }
             }
             
         except Exception as e:
