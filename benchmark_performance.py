@@ -30,7 +30,7 @@ def benchmark_query(query_data, description, runs=5):
             
             if i == 0:  # Show first result
                 print(f"\n📝 First Run Result:")
-                print(f"   Answer (preview): {result['answer'][:100]}...")
+                print(f"   Answer (preview): {result['answer']}")
                 print(f"   Chunks: {result.get('chunks_retrieved', 0)}")
         else:
             print(f"❌ Run {i+1} failed: {response.status_code}")

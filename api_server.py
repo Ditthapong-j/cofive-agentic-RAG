@@ -517,7 +517,7 @@ class AgenticRAGSystem:
     def _get_length_instruction(self, length: str) -> str:
         """Get instruction based on response length setting"""
         length_instructions = {
-            "short": "คำสั่งสำคัญ: ตอบให้สั้นที่สุด ไม่เกิน 300 ตัวอักษรเด็ดขาด! ห้ามใช้รายการ ห้ามใช้เลขหัวข้อ ห้ามใช้ขีดกลาง ห้ามใช้ ** ห้ามใช้ดาว ตอบเป็นข้อความเดียวต่อเนื่อง ไม่มีการจัดรูปแบบใดๆ กระชับ ตรงประเด็น เหมาะสำหรับการฟังทางโทร นับตัวอักษรก่อนตอบ หยุดเมื่อถึง 300 ตัวอักษร STOP AT 300 CHARACTERS!",
+            "short": "คำสั่งสำคัญ: ตอบในanswerให้สั้นที่สุด ไม่เกิน 300 ตัวอักษรเด็ดขาด! ห้ามใช้รายการ ห้ามใช้เลขหัวข้อ ห้ามใช้ขีดกลาง ห้ามใช้ ** ห้ามใช้ดาว กระชับ ตรงประเด็น เหมาะสำหรับการฟังทางโทร นับตัวอักษรก่อนตอบ หยุดเมื่อถึง 300 ตัวอักษร STOP AT 300 CHARACTERS!",
             "medium": "Provide a balanced response with key details (2-4 paragraphs).",
             "long": "Give a comprehensive response with detailed explanations (4-6 paragraphs).",
             "detailed": "Provide an exhaustive, detailed analysis with all relevant information, examples, and thorough explanations."
@@ -796,6 +796,29 @@ RULES YOU MUST FOLLOW:
 - Stop writing when you reach the limit
 
 IMPORTANT: Always base your answers on the provided document context and cite your sources clearly.
+IMPORTANT: Format all your answers in JSON conforming to the following schema:
+{{
+  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",
+  \"title\": \"CallTransferResponse\",
+  \"type\": \"object\",
+  \"properties\": {{
+    \"answer\": {{
+      \"type\": \"string\"
+    }},
+    \"isTransferToHumanAgent\": {{
+      \"type\": \"boolean\"
+    }},
+    \"isHungUpTheCall\": {{
+      \"type\": \"boolean\"
+    }}
+  }},
+  \"required\": [
+    \"answer\",
+    \"isTransferToHumanAgent\",
+    \"isHungUpTheCall\"
+  ],
+  \"additionalProperties\": false
+}}
 
 User Question: {question}"""
             
